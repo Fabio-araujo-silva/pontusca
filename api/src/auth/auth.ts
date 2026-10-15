@@ -18,6 +18,7 @@ import { Reflector } from '@nestjs/core';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { z } from 'zod';
+import { log, setLogUser } from '../common/log';
 import { PrismaService } from '../prisma/prisma.service';
 import { parse } from '../common/util';
 import type { Role } from '../shared/types';
@@ -51,7 +52,11 @@ export class AuthService {
 
   async login(email: string, password: string) {
     const u = await this.prisma.user.findUnique({ where: { email: email.toLowerCase().trim() }, include: { sports: true } });
-    if (!u || !u.active || !(await bcrypt.compare(password, u.passwordHash))) throw new UnauthorizedException('E-mail ou senha incorretos.');
+    if (!u || !u.active || !(await bcrypt.compare(password, u.passwordHash))) {
+      log.warn('auth.login_failed', { email, reason: !u ? 'e-mail não cadastrado' : !u.active ? 'usuário desativado' : 'senha errada' });
+      throw new UnauthorizedException('E-mail ou senha incorretos.');
+    }
+    log.info('auth.login', { email, userId: u.id, role: u.role });
     const user: AuthUser = { id: u.id, name: u.name, email: u.email, role: u.role as Role, sportIds: u.sports.map((s) => s.sportId) };
     return { token: await this.jwt.signAsync({ sub: u.id, role: u.role }), user };
   }
@@ -93,6 +98,7 @@ export class AuthGuard implements CanActivate {
     const token = header.startsWith('Bearer ') ? header.slice(7) : null;
     if (!token) throw new UnauthorizedException('Faça login.');
     req.user = await this.auth.resolve(token);
+    setLogUser(req.user);
     const roles = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES_KEY, [ctx.getHandler(), ctx.getClass()]);
     if (roles?.length && !roles.includes(req.user.role)) throw new ForbiddenException('Sem permissão para isso.');
     return true;

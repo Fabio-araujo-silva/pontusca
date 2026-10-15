@@ -14,6 +14,7 @@
     "build": "npm run build -w web && npm run build -w api",
     "start": "npm run start -w api",
     "test": "npm test -w api && npm test -w web",
+    "logs": "node api/scripts/logs.mjs",
     "typecheck": "npm run typecheck -w api && npm run typecheck -w web"
   },
   "devDependencies": {

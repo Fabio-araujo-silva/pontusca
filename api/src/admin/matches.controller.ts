@@ -1,7 +1,9 @@
 import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { z } from 'zod';
 import { AuthGuard, AuthUser, CurrentUser, Roles } from '../auth/auth';
+import { log } from '../common/log';
 import { json, parse } from '../common/util';
+import { LiveGateway } from '../live/live.gateway';
 import { LiveBus, LiveService } from '../live/live.service';
 import { saveParticipants } from '../live/mesa.controller';
 import { PrismaService } from '../prisma/prisma.service';
@@ -24,6 +26,13 @@ const MatchBody = z.object({
   status: z.enum(['SCHEDULED', 'POSTPONED', 'CANCELED']).optional(),
   participants: z.array(z.object({ id: z.string().optional(), institutionId: z.string(), athleteName: z.string().max(80).nullish(), lane: z.number().int().min(0).max(99).nullish() })).max(80).optional(),
 });
+
+// undefined = não mexe; null = tira a pessoa
+const StaffBody = z.object({ mesarioId: z.string().nullish(), backupMesarioId: z.string().nullish() });
+const BulkStaffBody = z.object({ matchIds: z.array(z.string()).min(1).max(300), role: z.enum(['mesario', 'backup']), userId: z.string().nullable() });
+
+const STAFF_CONFLICT_MS = 90 * 60_000; // jogos a menos disso um do outro = mesma pessoa em dois lugares
+const hm = (d: Date) => d.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
 
 const ResultBody = z.object({
   home: z.number().min(0).max(9999),
@@ -61,7 +70,7 @@ export class MatchesController {
       },
       orderBy: { scheduledAt: 'asc' },
       take: 1000,
-      include: { mesario: { select: { id: true, name: true } }, backupMesario: { select: { id: true, name: true } } },
+      include: { mesario: { select: { id: true, name: true, phone: true } }, backupMesario: { select: { id: true, name: true, phone: true } } },
     });
     return Promise.all(
       rows.map(async (r) => ({
@@ -139,13 +148,112 @@ export class MatchesController {
     return { ok: true };
   }
 
+  /** Escala rápida de um jogo: titular e/ou reserva. */
+  @Patch(':id/staff')
+  async staff(@Param('id') id: string, @Body() body: unknown) {
+    const b = parse(StaffBody, body);
+    return this.assignStaff([id], (m) => ({
+      mesarioId: b.mesarioId === undefined ? m.mesarioId : b.mesarioId,
+      backupMesarioId: b.backupMesarioId === undefined ? m.backupMesarioId : b.backupMesarioId,
+    }));
+  }
+
+  /** Escala em lote: põe (ou tira) uma pessoa como titular/reserva de vários jogos. */
+  @Post('staff/bulk')
+  async staffBulk(@Body() body: unknown) {
+    const b = parse(BulkStaffBody, body);
+    return this.assignStaff(b.matchIds, (m) =>
+      b.role === 'mesario'
+        ? // virou titular de um jogo em que era reserva: sai da reserva
+          { mesarioId: b.userId, backupMesarioId: b.userId && m.backupMesarioId === b.userId ? null : m.backupMesarioId }
+        : { backupMesarioId: b.userId, mesarioId: b.userId && m.mesarioId === b.userId ? null : m.mesarioId },
+    );
+  }
+
+  /**
+   * Aplica a escala com validação completa (pessoa ativa, habilitada na modalidade,
+   * titular ≠ reserva). Tudo ou nada. Devolve avisos de choque de horário.
+   */
+  private async assignStaff(ids: string[], next: (m: { mesarioId: string | null; backupMesarioId: string | null }) => { mesarioId: string | null; backupMesarioId: string | null }) {
+    const matches = await this.prisma.match.findMany({
+      where: { id: { in: ids } },
+      include: { sport: { select: { name: true } }, home: { select: { name: true } }, away: { select: { name: true } } },
+    });
+    if (matches.length !== new Set(ids).size) throw new NotFoundException('Algum jogo não foi encontrado (apagado?). Recarregue a lista.');
+    const label = (m: (typeof matches)[number]) => `${m.sport.name}${m.title ? ` · ${m.title}` : m.home && m.away ? ` ${m.home.name} × ${m.away.name}` : ''} (${hm(m.scheduledAt)})`;
+
+    const plan = matches.map((m) => ({ m, n: next(m) }));
+    const userIds = [...new Set(plan.flatMap(({ n }) => [n.mesarioId, n.backupMesarioId]).filter((x): x is string => !!x))];
+    const users = new Map((await this.prisma.user.findMany({ where: { id: { in: userIds } }, include: { sports: true } })).map((u) => [u.id, u]));
+
+    const errors: string[] = [];
+    for (const { m, n } of plan) {
+      if (n.mesarioId && n.mesarioId === n.backupMesarioId) errors.push(`${label(m)}: titular e reserva precisam ser pessoas diferentes.`);
+      for (const uid of [n.mesarioId, n.backupMesarioId]) {
+        if (!uid) continue;
+        const u = users.get(uid);
+        if (!u || !u.active) errors.push(`${label(m)}: pessoa não encontrada ou desativada.`);
+        else if (u.role === 'MESARIO' && !u.sports.some((s) => s.sportId === m.sportId)) errors.push(`${u.name} não está habilitado(a) para ${m.sport.name} (ver Equipe).`);
+      }
+    }
+    if (errors.length) {
+      log.warn('staff.rejected', { matches: ids, errors });
+      throw new BadRequestException(errors.length > 1 ? `${errors[0]} (+${errors.length - 1} problema${errors.length > 2 ? 's' : ''})` : errors[0]);
+    }
+
+    const changed = plan.filter(({ m, n }) => m.mesarioId !== n.mesarioId || m.backupMesarioId !== n.backupMesarioId);
+    await this.prisma.$transaction(
+      changed.map(({ m, n }) =>
+        this.prisma.match.update({
+          where: { id: m.id },
+          // trocou o reserva: a liberação dada ao anterior não vale pro novo
+          data: { mesarioId: n.mesarioId, backupMesarioId: n.backupMesarioId, ...(n.backupMesarioId !== m.backupMesarioId && { backupEnabled: false }) },
+        }),
+      ),
+    );
+    for (const { m, n } of changed) {
+      log.info('staff.assign', {
+        match: m.id,
+        jogo: label(m),
+        titular: [m.mesarioId, n.mesarioId].map((x) => (x ? (users.get(x)?.name ?? x) : '—')).join(' → '),
+        reserva: [m.backupMesarioId, n.backupMesarioId].map((x) => (x ? (users.get(x)?.name ?? x) : '—')).join(' → '),
+      });
+      this.bus.emit('staff', m.id);
+    }
+
+    // choque de horário: a mesma pessoa em outro jogo perto desse
+    const warnings: string[] = [];
+    for (const uid of userIds) {
+      // só quem acabou de entrar no jogo (o titular que já estava não gera aviso)
+      const mine = changed
+        .filter(({ m, n }) => (n.mesarioId === uid && m.mesarioId !== uid) || (n.backupMesarioId === uid && m.backupMesarioId !== uid))
+        .map(({ m }) => m);
+      if (!mine.length) continue;
+      const others = await this.prisma.match.findMany({
+        where: {
+          OR: [{ mesarioId: uid }, { backupMesarioId: uid }],
+          status: { in: ['SCHEDULED', 'LIVE'] },
+          scheduledAt: { gte: new Date(Math.min(...mine.map((m) => +m.scheduledAt)) - STAFF_CONFLICT_MS), lte: new Date(Math.max(...mine.map((m) => +m.scheduledAt)) + STAFF_CONFLICT_MS) },
+        },
+        include: { sport: { select: { name: true } }, home: { select: { name: true } }, away: { select: { name: true } } },
+        orderBy: { scheduledAt: 'asc' },
+      });
+      for (const m of mine)
+        for (const o of others)
+          if (o.id !== m.id && Math.abs(+o.scheduledAt - +m.scheduledAt) < STAFF_CONFLICT_MS)
+            warnings.push(`${users.get(uid)!.name} também está em ${label(o)}.`);
+    }
+    return { updated: changed.length, warnings: [...new Set(warnings)].slice(0, 6) };
+  }
+
   /** Libera (ou bloqueia) o mesário reserva de registrar AGORA. */
   @Post(':id/backup')
   async backup(@Param('id') id: string, @Body() body: unknown) {
     const { enabled } = parse(z.object({ enabled: z.boolean() }), body);
-    await this.prisma.match.update({ where: { id }, data: { backupEnabled: enabled } });
+    const m = await this.prisma.match.update({ where: { id }, data: { backupEnabled: enabled }, include: { backupMesario: { select: { name: true } } } });
     await this.live.refresh(id);
     this.bus.emit('staff', id);
+    log.info(enabled ? 'staff.backup_enabled' : 'staff.backup_blocked', { match: id, reserva: m.backupMesario?.name });
     return { ok: true, backupEnabled: enabled };
   }
 
@@ -233,7 +341,14 @@ export class DashboardController {
   constructor(
     private prisma: PrismaService,
     private live: LiveService,
+    private gateway: LiveGateway,
   ) {}
+
+  /** Quantos torcedores estão vendo cada jogo agora (o painel consulta a cada poucos segundos). */
+  @Get('presence')
+  presence(@Query('sandbox') sandbox?: string) {
+    return this.gateway.presence(sandbox === '1');
+  }
 
   @Get()
   async get(@CurrentUser() _me: AuthUser, @Query('sandbox') sandbox?: string) {
@@ -244,7 +359,7 @@ export class DashboardController {
     const rows = await this.prisma.match.findMany({
       where: { isSandbox, OR: [{ status: 'LIVE' }, { scheduledAt: { gte: dayStart, lte: dayEnd } }] },
       orderBy: { scheduledAt: 'asc' },
-      include: { mesario: { select: { id: true, name: true } }, backupMesario: { select: { id: true, name: true } } },
+      include: { mesario: { select: { id: true, name: true, phone: true } }, backupMesario: { select: { id: true, name: true, phone: true } } },
     });
     const items = await Promise.all(rows.map(async (r) => ({ summary: await this.live.summary(r.id), mesario: r.mesario, backup: r.backupMesario, backupEnabled: r.backupEnabled })));
     const alerts: { level: 'warn' | 'danger'; matchId: string; message: string }[] = [];

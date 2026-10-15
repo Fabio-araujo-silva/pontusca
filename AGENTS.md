@@ -73,6 +73,24 @@ Rode `npm test` e `npm run typecheck` antes de considerar algo pronto. Mudou reg
 - `DATABASE_URL` usa `?connection_limit=1` pra os PRAGMAs (WAL, synchronous) valerem.
 - Heredocs grandes no Git Bash às vezes quebram com aspas: prefira escrever scripts em arquivo.
 
+## Registro (logs): comece por aqui quando o usuário disser "deu erro"
+
+Tudo vai pra `api/logs/app-AAAA-MM-DD.jsonl` (JSON Lines, dia de Brasília, 14 dias, fora do git). Leia com:
+
+```bash
+npm run logs                      # últimas 24 h, avisos e erros (api + navegador)
+npm run logs -- --summary         # agrupado: o que mais quebra, com um --req de exemplo
+npm run logs -- --req <id>        # uma requisição de ponta a ponta (o id aparece na mensagem de erro 500 e no header x-request-id)
+npm run logs -- --match <id>      # tudo de um jogo: lances (live.command), desfazer, escala, erros
+npm run logs -- --user Maria --since 2h --level info
+npm run logs -- --ev web. --since 30m   # só erros vindos dos navegadores (mesário no celular etc.)
+npm run logs -- --follow          # ao vivo
+```
+
+- **Servidor** (`api/src/common/log.ts`, `http-log.ts`): toda escrita HTTP (com corpo, sem senha/token/imagens), todo 4xx/5xx, requisição lenta (>800 ms), erro 500 com stack, login (ok/falha), cada lance (`live.command`: jogo, seq, tipo, ação, placar, fase), desfazer, autor atribuído, escala de mesário (`staff.*`), erros de processo.
+- **Navegador** (`web/src/lib/log.ts`): erros JS, tela que quebrou (ErrorBoundary), falha de API (mesmo `req` do servidor), rede caindo, fila do mesário (`web.mesa.rejected`/`retry`), quedas do socket. Guarda no aparelho sem rede e envia depois. O site público só manda avisos/erros.
+- Pra registrar algo novo: `log.info('area.acao', { ... })` no servidor, `report('warn', 'area.acao', { msg, data })` no web. Nomes `area.acao`, dados pequenos.
+
 ## Repositório
 
 - Monorepo pessoal (`claudinho/`). Commits **direto na `main`**, mensagens no estilo `feat(pontusca): ...` em português, sem branches.

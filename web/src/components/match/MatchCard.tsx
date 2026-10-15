@@ -2,9 +2,10 @@
 // meio, e expande no lugar pra mostrar lance a lance, escalações e números.
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, MapPin, Star } from 'lucide-react';
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import type { Highlight, InstitutionDTO, MatchSummary } from '@shared/types';
 import { usePublic } from '@/pages/public/PublicLayout';
+import { useOnScreen } from '@/lib/audience';
 import { onHighlight } from '@/lib/data';
 import { alpha, fmtScore, onColor, teamTone } from '@/lib/format';
 import { useNow } from '@/lib/hooks';
@@ -24,9 +25,11 @@ export const MatchCard = memo(function MatchCard({ m, expanded, onToggle }: { m:
   const { profile } = useProfile();
   const fav = involves(m, profile.atleticaId);
   const flash = useCardFlash(m.id, focused, profile.atleticaId);
+  const ref = useRef<HTMLElement>(null);
+  useOnScreen(ref, m.id);
 
   return (
-    <motion.article layout="position" className={cx('card relative overflow-hidden', expanded && 'ring-white/[0.12]')}>
+    <motion.article ref={ref} layout="position" className={cx('card relative overflow-hidden', expanded && 'ring-white/[0.12]')}>
       <button type="button" onClick={onToggle} className="relative z-10 block w-full overflow-hidden px-4 pb-3.5 pt-3 text-left" aria-expanded={expanded}>
         <AnimatePresence>{flash && <CardFlash key={flash.key} h={flash.h} m={m} inst={inst} />}</AnimatePresence>
         <div className="flex items-center gap-2 text-[12px] text-mute">

@@ -9,6 +9,9 @@ import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { Toaster } from './components/ui/primitives';
 import { AuthProvider } from './lib/auth';
+import { installErrorLogging } from './lib/log';
+
+installErrorLogging();
 
 const qc = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },

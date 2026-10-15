@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
-import { Link, Route, Routes } from 'react-router-dom';
+import { Link, Route, Routes, useLocation } from 'react-router-dom';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { RequireAuth } from './components/Login';
 import { Spinner } from './components/ui/primitives';
 import { ADMIN_PATH } from './lib/auth';
@@ -19,44 +20,49 @@ const Fallback = () => (
 );
 
 export function App() {
+  const loc = useLocation();
+  // trocar de área zera o aviso de erro (key)
+  const area = loc.pathname.startsWith('/mesa') ? 'mesa' : loc.pathname.startsWith(ADMIN_PATH) ? 'admin' : 'publico';
   return (
-    <Suspense fallback={<Fallback />}>
-      <Routes>
-        <Route element={<PublicLayout />}>
-          <Route index element={<Home />} />
-          <Route path="jogo/:id" element={<MatchPage />} />
-          <Route path="classificacao" element={<Standings />} />
-          <Route path="atletica/:slug" element={<InstitutionPage />} />
-        </Route>
-        <Route
-          path="mesa/*"
-          element={
-            <RequireAuth roles={['ADMIN', 'MESARIO']} title="Mesa" subtitle="área do mesário">
-              <MesaApp />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path={`${ADMIN_PATH.slice(1)}/*`}
-          element={
-            <RequireAuth roles={['ADMIN']} title="Bastidores" subtitle="painel da organização">
-              <AdminApp />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="*"
-          element={
-            <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-3">
-              <p className="font-display text-6xl font-extrabold">404</p>
-              <p className="text-mute">Esse lance não existe.</p>
-              <Link to="/" className="mt-2 text-brand underline-offset-4 hover:underline">
-                Voltar pros placares
-              </Link>
-            </div>
-          }
-        />
-      </Routes>
-    </Suspense>
+    <ErrorBoundary key={area} area={area}>
+      <Suspense fallback={<Fallback />}>
+        <Routes>
+          <Route element={<PublicLayout />}>
+            <Route index element={<Home />} />
+            <Route path="jogo/:id" element={<MatchPage />} />
+            <Route path="classificacao" element={<Standings />} />
+            <Route path="atletica/:slug" element={<InstitutionPage />} />
+          </Route>
+          <Route
+            path="mesa/*"
+            element={
+              <RequireAuth roles={['ADMIN', 'MESARIO']} title="Mesa" subtitle="área do mesário">
+                <MesaApp />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path={`${ADMIN_PATH.slice(1)}/*`}
+            element={
+              <RequireAuth roles={['ADMIN']} title="Bastidores" subtitle="painel da organização">
+                <AdminApp />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="*"
+            element={
+              <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-3">
+                <p className="font-display text-6xl font-extrabold">404</p>
+                <p className="text-mute">Esse lance não existe.</p>
+                <Link to="/" className="mt-2 text-brand underline-offset-4 hover:underline">
+                  Voltar pros placares
+                </Link>
+              </div>
+            }
+          />
+        </Routes>
+      </Suspense>
+    </ErrorBoundary>
   );
 }

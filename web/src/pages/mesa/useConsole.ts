@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { authorSlots, buildEvent, EngineError, EngineInput, missingAuthor, runEngine } from '@shared/engine';
 import type { EngineEvent, MatchCommand, MatchDetail, MatchSummary, Side } from '@shared/types';
 import { ApiError, get, patch, post, put } from '@/lib/api';
+import { report } from '@/lib/log';
 import { vibrate } from '@/lib/hooks';
 import { serverNow, useConnected, useRooms, useSocketEvent } from '@/lib/socket';
 import { toast } from '@/components/ui/primitives';
@@ -170,12 +171,14 @@ export function useConsole(id: string) {
           setQueue((q) => q.filter((x) => x.clientId !== item.clientId));
         } catch (e: any) {
           if (!isNetwork(e)) {
+            report('warn', 'mesa.rejected', { msg: e.message, req: e.requestId, data: { match: id, status: e.status, cmd: item.cmd ?? null, assign: item.assign ?? null, queued: queueRef.current.length } });
             setQueue((q) => q.filter((x) => x.clientId !== item.clientId));
             toast.err(e.message || 'Lance recusado pelo servidor.');
             vibrate([40, 60, 40]);
             mustReload = true;
             if (e.status === 401 || e.status === 403) break;
           } else {
+            report('info', 'mesa.retry', { msg: e?.message, req: e?.requestId, data: { match: id, queued: queueRef.current.length, delay, online: navigator.onLine } });
             setSyncIssue(true);
             await sleep(delay);
             delay = Math.min(delay * 2, 15000);
@@ -211,8 +214,13 @@ export function useConsole(id: string) {
       try {
         draft = buildEvent(inp, o, full, serverNow());
       } catch (e) {
-        if (e instanceof EngineError) toast.err(e.message);
-        else toast.err('Não deu pra registrar esse lance.');
+        if (e instanceof EngineError) {
+          toast.err(e.message);
+          report('info', 'mesa.local_refused', { msg: e.message, data: { match: id, cmd: full } });
+        } else {
+          toast.err('Não deu pra registrar esse lance.');
+          report('error', 'mesa.engine_crash', { err: e, data: { match: id, cmd: full, events: inp.events.length } });
+        }
         vibrate([30, 50, 30]);
         return false;
       }

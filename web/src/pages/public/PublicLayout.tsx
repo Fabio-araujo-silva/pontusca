@@ -9,6 +9,7 @@ import { TeamFlag } from '@/components/ui/TeamFlag';
 import { cx, Spinner } from '@/components/ui/primitives';
 import { Logo } from '@/components/ui/Logo';
 import { Ticker } from '@/components/ui/Ticker';
+import { useAudience } from '@/lib/audience';
 import { Bootstrap, useBootstrap, useFeed, useLiveSync } from '@/lib/data';
 import { useProfile } from '@/lib/profile';
 import { exitSandbox, SANDBOX } from '@/lib/sandbox';
@@ -38,6 +39,7 @@ export default function PublicLayout() {
   const [focused, setFocused] = useState<string | null>(null);
   const [compactTitle, setCompactTitle] = useState<string | null>(null);
   const compact = useScrolled();
+  useAudience(focused, SANDBOX);
   // o torneio é definido pelo admin ("torneio do momento"); o público não escolhe
   const tournament = b.data?.tournaments[0] ?? null;
   const { profile, save } = useProfile();

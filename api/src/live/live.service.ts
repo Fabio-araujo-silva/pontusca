@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, OnApplicationBootstrap } from '@nestjs/common';
+import { log } from '../common/log';
 import { EventEmitter } from 'events';
 import type { Athlete, Match, MatchEvent, MatchParticipant, MatchPlayer, Sport } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -110,6 +111,7 @@ export class LiveService implements OnApplicationBootstrap {
       if (cmd.clientId && e.byClientId.has(cmd.clientId)) {
         // retry de um comando que já chegou (rede caiu na resposta): não duplica
         const evId = e.byClientId.get(cmd.clientId)!;
+        log.info('live.command_duplicate', { match: id, clientId: cmd.clientId, eventId: evId });
         return { summary: e.summary, event: e.events.find((x) => x.id === evId) ?? null, duplicate: true };
       }
       if (e.match.manualResult) throw new BadRequestException('Este jogo tem resultado lançado manualmente pelo admin.');
@@ -122,7 +124,11 @@ export class LiveService implements OnApplicationBootstrap {
       try {
         draft = buildEvent(this.input(e), e.out, cmd, now);
       } catch (err) {
-        if (err instanceof EngineError) throw new BadRequestException(err.message);
+        if (err instanceof EngineError) {
+          log.warn('live.rejected', { match: id, reason: err.message, cmd, status: e.match.status, seq: e.match.seq });
+          throw new BadRequestException(err.message);
+        }
+        log.error('live.engine_crash', { match: id, cmd, err, seq: e.match.seq });
         throw err;
       }
       const seq = e.match.seq + 1;
@@ -149,6 +155,17 @@ export class LiveService implements OnApplicationBootstrap {
       this.compute(e);
       await this.persist(e);
       this.publish(e, e.out.highlight);
+      log.info('live.command', {
+        match: id,
+        seq,
+        type: draft.type,
+        side: draft.side,
+        action: (cmd as { payload?: { action?: string } }).payload?.action,
+        athleteId: draft.athleteId,
+        clientId: cmd.clientId,
+        score: `${e.summary.score.home}x${e.summary.score.away}`,
+        phase: e.summary.live.phase,
+      });
       return { summary: e.summary, event: ev, duplicate: false };
     });
   }
@@ -166,6 +183,7 @@ export class LiveService implements OnApplicationBootstrap {
         this.compute(e);
         await this.persist(e);
         this.publish(e, null);
+        log.info('live.void', { match: id, eventId, type: row.type, seq: row.seq, score: `${e.summary.score.home}x${e.summary.score.away}` });
       }
       return { summary: e.summary };
     });
@@ -190,6 +208,7 @@ export class LiveService implements OnApplicationBootstrap {
       this.compute(e);
       await this.persist(e);
       this.publish(e, null);
+      log.info('live.assign_athlete', { match: id, eventId, ...data });
       return { summary: e.summary, event: ev };
     });
   }

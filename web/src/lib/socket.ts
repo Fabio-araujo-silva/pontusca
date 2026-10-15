@@ -1,6 +1,7 @@
 // Conexão única de WebSocket (socket.io, namespace /live) compartilhada pelo app.
 import { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { report } from './log';
 
 let socket: Socket | null = null;
 let offset = 0; // relógio do servidor - relógio local
@@ -22,7 +23,16 @@ export function getSocket(): Socket {
     offset = p.serverTime - Date.now();
     syncTime(socket!);
   });
+  // quedas e voltas da conexão em tempo real (ajuda a explicar "o placar não atualizou")
+  let downAt = 0;
+  socket.on('disconnect', (reason) => {
+    downAt = Date.now();
+    if (reason !== 'io client disconnect') report('info', 'socket.disconnect', { msg: reason, data: { online: navigator.onLine } });
+  });
+  socket.on('connect_error', (e) => report('warn', 'socket.connect_error', { msg: e.message }));
   socket.on('connect', () => {
+    if (downAt) report('info', 'socket.reconnect', { data: { downMs: Date.now() - downAt } });
+    downAt = 0;
     const list = [...rooms.keys()];
     if (list.length) socket!.emit('join', list);
   });

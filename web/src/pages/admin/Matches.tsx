@@ -1,7 +1,7 @@
 // Jogos do torneio: filtros rápidos, lista agrupada por dia e todas as ações
 // (editar, duplicar, resultado manual, reserva, elencos, zerar, excluir).
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ClipboardList, Copy, Eye, ListPlus, Lock, LockOpen, MonitorPlay, Pencil, Plus, RotateCcw, Search, Shirt, Trash2, Trophy } from 'lucide-react';
+import { ClipboardList, Copy, Eye, ListPlus, Lock, LockOpen, MonitorPlay, Pencil, Plus, RotateCcw, Search, Shirt, Trash2, Trophy, UserPlus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { MatchSummary } from '@shared/types';
 import { Button, Confirm, cx, Empty, Sheet, Spinner } from '@/components/ui/primitives';
@@ -10,6 +10,7 @@ import { del, get, post, put } from '@/lib/api';
 import { dayChip, dayKey, fmtScore, longDate, timeHM } from '@/lib/format';
 import { useRooms, useSocketEvent } from '@/lib/socket';
 import { AdminMatchRow, useAdmin } from './ctx';
+import { StaffButton, StaffPicker, StaffRole } from './Staff';
 import { BulkSheet, MatchFormSheet, MatchFormState } from './MatchForm';
 import { Field, MatchLine, NumInput, PageHeader, Select, StatusPill, toLocalInput, useAction } from './ui';
 
@@ -220,14 +221,12 @@ function Row({ r, onOpen, onEdit }: { r: AdminMatchRow; onOpen: () => void; onEd
         <StatusPill m={m} />
         {m.manual && <span className="rounded-full bg-sky-400/15 px-2 py-0.5 text-[10px] font-bold uppercase text-sky-300">manual</span>}
       </div>
-      <div className="hidden w-40 text-right text-[12px] leading-tight md:block">
-        <div className={r.mesario ? 'text-white/80' : 'font-semibold text-amber-300'}>{r.mesario?.name ?? 'sem mesário'}</div>
-        {r.backup && (
-          <div className="text-mute">
-            res. {r.backup.name}
-            {r.backupEnabled && <span className="text-brand"> · liberado</span>}
-          </div>
-        )}
+      <div className="flex w-full flex-col items-start leading-tight md:w-44 md:items-end" onClick={(e) => e.stopPropagation()}>
+        <StaffButton r={r} role="mesario" />
+        <span className="inline-flex items-center">
+          <StaffButton r={r} role="backup" className="font-normal text-mute" />
+          {r.backupEnabled && <span className="text-[11px] font-semibold text-brand">· liberado</span>}
+        </span>
       </div>
       <div className="hidden items-center gap-0.5 sm:flex" onClick={(e) => e.stopPropagation()}>
         <button className="rounded-lg p-1.5 text-mute hover:bg-white/10 hover:text-white" title="Editar" onClick={onEdit}>
@@ -246,6 +245,7 @@ function ActionsSheet({ r, onClose, onEdit, onDuplicate }: { r: AdminMatchRow | 
   const inv = [['admin', 'matches', tournamentId], ['admin', 'dashboard']];
   const [confirm, setConfirm] = useState<'reset' | 'delete' | null>(null);
   const [result, setResult] = useState(false);
+  const [staff, setStaff] = useState<StaffRole | null>(null);
   const id = r?.summary.id ?? '';
   const backup = useAction((en: boolean) => post(`/admin/matches/${id}/backup`, { enabled: en }), { ok: (x: any) => (x.backupEnabled ? 'Reserva liberado' : 'Reserva bloqueado'), invalidate: inv, onDone: onClose });
   const lineups = useAction(() => post<{ imported: number }>(`/admin/matches/${id}/import-lineups`), { ok: (x) => `${x.imported} atleta(s) importado(s) dos elencos`, invalidate: inv });
@@ -257,7 +257,8 @@ function ActionsSheet({ r, onClose, onEdit, onDuplicate }: { r: AdminMatchRow | 
   const item = 'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-medium hover:bg-white/[0.06]';
   return (
     <>
-      <Sheet open={!!r && !confirm && !result} onClose={onClose} title="Jogo">
+      <StaffPicker r={r} role={staff ?? 'mesario'} open={!!staff} onClose={() => (setStaff(null), onClose())} />
+      <Sheet open={!!r && !confirm && !result && !staff} onClose={onClose} title="Jogo">
         {m && (
           <div>
             <div className="mb-4 rounded-2xl bg-white/[0.04] p-3">
@@ -269,6 +270,12 @@ function ActionsSheet({ r, onClose, onEdit, onDuplicate }: { r: AdminMatchRow | 
             <div className="grid gap-0.5">
               <button className={item} onClick={() => onEdit(m.id)}>
                 <Pencil className="h-4 w-4 text-mute" /> Editar
+              </button>
+              <button className={item} onClick={() => setStaff('mesario')}>
+                <UserPlus className="h-4 w-4 text-mute" /> {r?.mesario ? `Trocar titular (${r.mesario.name})` : 'Escalar mesário titular'}
+              </button>
+              <button className={item} onClick={() => setStaff('backup')}>
+                <UserPlus className="h-4 w-4 text-mute" /> {r?.backup ? `Trocar reserva (${r.backup.name})` : 'Escalar mesário reserva'}
               </button>
               <button className={item} onClick={() => onDuplicate(m.id)}>
                 <Copy className="h-4 w-4 text-mute" /> Duplicar

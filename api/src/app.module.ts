@@ -6,6 +6,7 @@ import { AthletesController, InstitutionsController, SportsController, Tournamen
 import { DashboardController, MatchesController } from './admin/matches.controller';
 import { ScoringController } from './admin/scoring.controller';
 import { AuthModule } from './auth/auth';
+import { ClientLogController } from './common/http-log';
 import { LiveGateway } from './live/live.gateway';
 import { LiveBus, LiveService } from './live/live.service';
 import { MesaController } from './live/mesa.controller';
@@ -36,6 +37,7 @@ const WEB_DIST = [join(__dirname, '..', '..', 'web', 'dist'), join(__dirname, '.
     DashboardController,
     ScoringController,
     SandboxController,
+    ClientLogController,
   ],
   providers: [LiveBus, LiveService, LiveGateway, FeedService, StandingsService, SandboxService],
 })

@@ -53,11 +53,13 @@ Ordem sugerida pra montar um torneio do zero:
 2. **Atléticas** → nome curto (ex.: CAASO), cores, padrão da bandeira e logo (opcional). As cores viram a "cara" da atlética no site, no console e no print compartilhável.
 3. **Modalidades** → já vêm 42 prontas (futebol, futsal, basquete, vôlei, tênis, beisebol, lutas, natação, e-sports…). Dá pra ajustar períodos, duração, prorrogação, pênaltis, sets e os botões que o mesário vê.
 4. **Atletas & elencos** → escolha a atlética, a modalidade e o naipe e use **Colar lista** (um por linha: `10 João Silva - ATA`). O elenco entra automaticamente na escalação de cada jogo.
-5. **Equipe** → cadastre os mesários e marque **em quais modalidades** cada um pode registrar.
-6. **Jogos** → *Novo jogo* (ou *Criar rodada* pra vários de uma vez): modalidade, naipe, horário, local, as duas atléticas (ou os participantes, em provas como natação), **mesário titular** e **reserva**.
+5. **Equipe** → cadastre os mesários (com telefone) e marque **em quais modalidades** cada um pode registrar. O botão **N titular · N reserva** de cada pessoa abre os jogos dela: marque vários e **Escalar** de uma vez (como titular ou reserva). O painel avisa se a pessoa fica em dois jogos com menos de 1h30 de diferença.
+6. **Jogos** → *Novo jogo* (ou *Criar rodada* pra vários de uma vez): modalidade, naipe, horário, local, as duas atléticas (ou os participantes, em provas como natação), **mesário titular** e **reserva**. Também dá pra escalar/trocar direto na lista de Jogos: toque no nome do mesário (ou em *Escalar mesário*).
 7. **Pontuação** → quanto vale vitória/empate/derrota/W.O. (padrão e por modalidade), pontos pela **classificação final** de cada modalidade (1º, 2º, 3º…), critérios de desempate e **ajustes manuais** (bônus/punição com motivo).
 
-No dia do evento, a **Visão geral** mostra o que está ao vivo e avisa: jogo sem mesário, jogo atrasado, ao vivo parado há muito tempo.
+No dia do evento, a **Visão geral** mostra:
+- **Alertas** (jogo sem mesário, atrasado, ao vivo parado há muito tempo) com o **responsável em destaque**: titular e reserva, telefone com botões de ligar/WhatsApp, *Trocar*/*Escalar* e *Liberar reserva* ali mesmo.
+- **No site agora** e **Audiência agora**: quantos torcedores estão com cada jogo na tela (e quantos com ele aberto), atualizado a cada 5 s. Admins e mesários não contam.
 
 **Reserva:** o mesário reserva só consegue registrar quando você clicar **Liberar reserva** no jogo (Visão geral ou Jogos). A tela dele destrava na hora.
 
@@ -115,7 +117,15 @@ Resumo (detalhes no `README.md`, seção Deploy): é uma imagem Docker só; no F
 
 ---
 
-## 7. Problemas comuns
+## 7. Quando der erro
+
+O sistema registra sozinho o que acontece: servidor, celular do mesário, site do torcedor. Nada de senha fica gravado.
+
+- Erro do servidor mostra um **código** (ex.: `Código: a1b2c3d4e5f6`). Anote e mande pro agente/dev: `npm run logs -- --req a1b2c3d4e5f6` mostra o caminho todo.
+- Problema num jogo? `npm run logs -- --match <id do jogo>` (o id está na URL `/jogo/<id>`).
+- Visão geral do que anda falhando: `npm run logs -- --summary`.
+
+## 8. Problemas comuns
 
 | Sintoma | Causa provável / solução |
 |---|---|

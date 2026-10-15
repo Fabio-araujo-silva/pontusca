@@ -10,3 +10,5 @@ api/prisma/*.db*
 .env
 .env.*
 !.env.example
+# registro do servidor (npm run logs)
+api/logs/

@@ -4,12 +4,25 @@ import type { Namespace, Socket } from 'socket.io';
 import type { Highlight, MatchSummary } from '../shared/types';
 import { LiveBus } from './live.service';
 
-const ROOM = /^(feed|feed:sandbox|match:[a-z0-9]{10,40})$/;
+const ROOM = /^(feed|feed:sandbox|mesa|match:[a-z0-9]{10,40})$/;
+const MATCH_ID = /^[a-z0-9]{10,40}$/;
+
+export interface Presence {
+  /** abas do site público abertas agora */
+  online: number;
+  /** por jogo: na tela (card visível ou aberto) e aberto (lance a lance) */
+  matches: Record<string, { watching: number; open: number }>;
+}
 
 /**
  * Tempo real. Salas:
  *  - feed / feed:sandbox -> resumo de TODOS os jogos (placar do card)
  *  - match:<id>          -> quem está com o card expandido
+ *  - mesa                -> telas iniciais dos mesários (escala mudou)
+ * Audiência (só o site público manda `watch`; staff não conta):
+ *  - aud:<env>            -> torcedores com o site aberto
+ *  - w:<env>:<id>         -> com o card na tela
+ *  - o:<env>:<id>         -> com o jogo aberto
  */
 @WebSocketGateway({ namespace: '/live', cors: { origin: true, credentials: true }, transports: ['websocket', 'polling'], perMessageDeflate: false })
 export class LiveGateway implements OnGatewayConnection, OnModuleInit {
@@ -29,7 +42,7 @@ export class LiveGateway implements OnGatewayConnection, OnModuleInit {
     this.bus.on('standings', (tournamentId: string) => this.server.emit('standings:changed', { tournamentId }));
     this.bus.on('catalog', () => this.server.emit('catalog:changed', {}));
     // escala/permissão mudou (ex.: admin liberou o reserva) -> console do mesário recarrega
-    this.bus.on('staff', (matchId: string) => this.server.to(`match:${matchId}`).emit('staff:changed', { matchId }));
+    this.bus.on('staff', (matchId: string) => this.server.to(`match:${matchId}`).to('mesa').emit('staff:changed', { matchId }));
   }
 
   handleConnection(client: Socket) {
@@ -47,6 +60,32 @@ export class LiveGateway implements OnGatewayConnection, OnModuleInit {
   leave(@ConnectedSocket() client: Socket, @MessageBody() rooms: unknown) {
     if (Array.isArray(rooms)) for (const r of rooms) if (typeof r === 'string') void client.leave(r);
     return { ok: true };
+  }
+
+  /** O site público avisa o que está na tela. Substitui o estado anterior do socket. */
+  @SubscribeMessage('watch')
+  watch(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const b = (body && typeof body === 'object' ? body : {}) as { sandbox?: unknown; open?: unknown; watching?: unknown; off?: unknown };
+    for (const r of [...client.rooms]) if (r.startsWith('aud:') || r.startsWith('w:') || r.startsWith('o:')) void client.leave(r);
+    if (b.off === true) return { ok: true };
+    const env = b.sandbox === true ? 'sandbox' : 'real';
+    const ids = new Set(Array.isArray(b.watching) ? b.watching.filter((x): x is string => typeof x === 'string' && MATCH_ID.test(x)).slice(0, 30) : []);
+    const open = typeof b.open === 'string' && MATCH_ID.test(b.open) ? b.open : null;
+    if (open) ids.add(open);
+    void client.join([`aud:${env}`, ...[...ids].map((id) => `w:${env}:${id}`), ...(open ? [`o:${env}:${open}`] : [])]);
+    return { ok: true };
+  }
+
+  presence(sandbox: boolean): Presence {
+    const env = sandbox ? 'sandbox' : 'real';
+    const rooms = this.server.adapter.rooms;
+    const matches: Presence['matches'] = {};
+    const slot = (id: string) => (matches[id] ??= { watching: 0, open: 0 });
+    for (const [name, set] of rooms) {
+      if (name.startsWith(`w:${env}:`)) slot(name.slice(env.length + 3)).watching = set.size;
+      else if (name.startsWith(`o:${env}:`)) slot(name.slice(env.length + 3)).open = set.size;
+    }
+    return { online: rooms.get(`aud:${env}`)?.size ?? 0, matches };
   }
 
   @SubscribeMessage('time')

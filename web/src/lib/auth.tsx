@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import { Context, createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import type { Role } from '@shared/types';
 import { api, ApiError, tokenStore } from './api';
 
@@ -17,7 +17,10 @@ interface AuthCtx {
   logout(): void;
 }
 
-const Ctx = createContext<AuthCtx>(null as any);
+// em dev, o HMR reexecuta este arquivo: reaproveita o mesmo contexto pra não
+// "perder" o login (useAuth() nulo) na tela que já estava aberta
+const Ctx: Context<AuthCtx> = import.meta.hot?.data.authCtx ?? createContext<AuthCtx>(null as any);
+if (import.meta.hot) import.meta.hot.data.authCtx = Ctx;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);

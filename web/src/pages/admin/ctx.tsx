@@ -21,8 +21,8 @@ export interface AdminUser {
 }
 export interface AdminMatchRow {
   summary: MatchSummary;
-  mesario: { id: string; name: string } | null;
-  backup: { id: string; name: string } | null;
+  mesario: { id: string; name: string; phone?: string | null } | null;
+  backup: { id: string; name: string; phone?: string | null } | null;
   backupEnabled: boolean;
   countsForStandings?: boolean;
   notes?: string | null;

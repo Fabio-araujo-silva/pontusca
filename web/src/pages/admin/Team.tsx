@@ -1,5 +1,5 @@
 // Equipe: admins e mesários, com as modalidades que cada mesário pode registrar.
-import { Pencil, Plus, Trash2, UserCog } from 'lucide-react';
+import { CalendarDays, Pencil, Plus, Trash2, UserCog } from 'lucide-react';
 import { useState } from 'react';
 import type { Role } from '@shared/types';
 import { Button, Confirm, cx, Empty, Segmented, Sheet } from '@/components/ui/primitives';
@@ -7,6 +7,7 @@ import { SportIcon } from '@/components/ui/SportIcon';
 import { del, patch, post } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { AdminUser, useAdmin } from './ctx';
+import { PersonGames } from './Staff';
 import { Field, PageHeader, Toggle, useAction } from './ui';
 
 interface Form {
@@ -27,6 +28,7 @@ export default function Team() {
   const { user: me } = useAuth();
   const [f, setF] = useState<Form | null>(null);
   const [delU, setDelU] = useState<AdminUser | null>(null);
+  const [games, setGames] = useState<AdminUser | null>(null);
   const [filter, setFilter] = useState<'all' | Role>('all');
 
   const save = useAction(
@@ -113,9 +115,14 @@ export default function Team() {
                   {u.sportIds.length > 8 && u.sportIds.length < sports.length && <span className="text-[11px] text-mute">+{u.sportIds.length - 8}</span>}
                 </div>
               )}
-              <span className="w-28 text-right text-[12px] text-mute">
+              <button
+                onClick={() => setGames(u)}
+                className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-1.5 text-[12px] font-semibold text-white/85 hover:bg-white/[0.1]"
+                title="Ver e atribuir jogos"
+              >
+                <CalendarDays className="h-3.5 w-3.5" />
                 {u.matches} titular · {u.backupMatches} reserva
-              </span>
+              </button>
               <button className="rounded-lg p-1.5 text-mute hover:bg-white/10 hover:text-white" onClick={() => edit(u)} aria-label="Editar">
                 <Pencil className="h-4 w-4" />
               </button>
@@ -127,6 +134,7 @@ export default function Team() {
         </div>
       )}
 
+      <PersonGames user={games} onClose={() => setGames(null)} />
       <Sheet
         open={!!f}
         onClose={() => setF(null)}
