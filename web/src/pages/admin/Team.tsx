@@ -8,7 +8,7 @@ import { del, patch, post } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { AdminUser, useAdmin } from './ctx';
 import { PersonGames } from './Staff';
-import { Field, PageHeader, Toggle, useAction } from './ui';
+import { Field, MATCH_DATA_KEYS, PageHeader, Toggle, useAction } from './ui';
 
 interface Form {
   id?: string;
@@ -38,7 +38,7 @@ export default function Team() {
     },
     { ok: 'Pessoa salva', onDone: () => (refresh('users'), setF(null)) },
   );
-  const remove = useAction((id: string) => del(`/admin/users/${id}`), { ok: 'Pessoa removida', onDone: () => (refresh('users'), setDelU(null)) });
+  const remove = useAction((id: string) => del(`/admin/users/${id}`), { ok: 'Pessoa removida', invalidate: MATCH_DATA_KEYS, onDone: () => setDelU(null) });
 
   const edit = (u?: AdminUser, role: Role = 'MESARIO') =>
     setF(u ? { id: u.id, name: u.name, email: u.email, password: '', role: u.role, phone: u.phone ?? '', active: u.active, sportIds: u.sportIds } : { name: '', email: '', password: '', role, phone: '', active: true, sportIds: [] });
@@ -101,7 +101,7 @@ export default function Team() {
               </div>
               {u.role === 'MESARIO' && (
                 <div className="flex min-w-0 max-w-md flex-1 flex-wrap gap-1">
-                  {u.sportIds.length === 0 && <span className="text-[12px] font-semibold text-amber-300">nenhuma modalidade</span>}
+                  {u.sportIds.length === 0 && <span className="text-[12px] font-semibold text-warn">nenhuma modalidade</span>}
                   {u.sportIds.length >= sports.length && sports.length > 0 ? (
                     <span className="text-[12px] text-mute">todas as modalidades</span>
                   ) : (

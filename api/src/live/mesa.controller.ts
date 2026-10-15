@@ -9,6 +9,7 @@ import { LiveService } from './live.service';
 
 const Command = z.object({
   clientId: z.string().min(1).max(64),
+  at: z.number().int().positive().optional(),
   type: z.string().min(1).max(40),
   side: z.enum(['home', 'away']).nullish(),
   athleteId: z.string().max(40).nullish(),

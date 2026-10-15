@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { z } from 'zod';
 import { AuthGuard, AuthUser, CurrentUser, Roles } from '../auth/auth';
 import { json, parse } from '../common/util';
@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { StandingsService } from '../standings/standings.service';
 
 const RuleBody = z.object({
+  id: z.string().optional(),
   tournamentId: z.string(),
   sportId: z.string().nullish(),
   gender: z.enum(['M', 'F', 'X']).nullish(),
@@ -75,10 +76,16 @@ export class ScoringController {
       racePoints: JSON.stringify(b.racePoints),
       tiebreakers: JSON.stringify(b.tiebreakers),
     };
-    const existing = await this.prisma.scoringRule.findFirst({ where: { tournamentId: b.tournamentId, sportId: b.sportId ?? null, gender: b.gender ?? null } });
-    const r = existing
-      ? await this.prisma.scoringRule.update({ where: { id: existing.id }, data })
-      : await this.prisma.scoringRule.create({ data: { ...data, tournamentId: b.tournamentId, sportId: b.sportId ?? null, gender: b.gender ?? null } });
+    const scope = { tournamentId: b.tournamentId, sportId: b.sportId ?? null, gender: b.gender ?? null };
+    const sameScope = await this.prisma.scoringRule.findFirst({ where: scope });
+    let r;
+    if (b.id) {
+      // editando uma regra: muda o escopo dela, sem apagar outra que já cubra o escopo novo
+      if (sameScope && sameScope.id !== b.id) throw new BadRequestException('Já existe uma regra pra essa modalidade/naipe. Edite aquela.');
+      r = await this.prisma.scoringRule.update({ where: { id: b.id }, data: { ...data, sportId: scope.sportId, gender: scope.gender } });
+    } else {
+      r = sameScope ? await this.prisma.scoringRule.update({ where: { id: sameScope.id }, data }) : await this.prisma.scoringRule.create({ data: { ...data, ...scope } });
+    }
     this.bus.emit('standings', b.tournamentId);
     return r;
   }

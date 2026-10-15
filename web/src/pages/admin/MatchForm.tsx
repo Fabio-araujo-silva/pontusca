@@ -1,7 +1,7 @@
 // Formulário de jogo (criar / editar / duplicar) + criação em lote de rodada.
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Gender } from '@shared/types';
 import { Button, Sheet, Spinner, toast } from '@/components/ui/primitives';
 import { SportIcon } from '@/components/ui/SportIcon';
@@ -9,7 +9,7 @@ import { TeamFlag } from '@/components/ui/TeamFlag';
 import { get, patch, post } from '@/lib/api';
 import { GENDER } from '@/lib/format';
 import { useAdmin } from './ctx';
-import { Field, fromLocalInput, NumInput, Select, toLocalInput, Toggle, useAction } from './ui';
+import { Field, fromLocalInput, MATCH_DATA_KEYS, NumInput, Select, toLocalInput, Toggle, useAction } from './ui';
 
 interface Participant {
   id?: string;
@@ -33,16 +33,22 @@ export interface MatchFormState {
   backupMesarioId: string;
   countsForStandings: boolean;
   notes: string;
+  /** sandbox: o robô não mexe neste jogo (marcador #manual nas observações) */
+  robotOff: boolean;
   status: 'SCHEDULED' | 'POSTPONED' | 'CANCELED';
   participants: Participant[];
 }
 
+const ROBOT_TAG = /\s*#manual\b/gi;
+/** Separa o marcador do robô do texto das observações. */
+export const splitNotes = (notes?: string | null) => ({ notes: (notes ?? '').replace(ROBOT_TAG, '').trim(), robotOff: /#manual\b/i.test(notes ?? '') });
+
 const PHASE_SUGGESTIONS = ['Fase de grupos', 'Oitavas de final', 'Quartas de final', 'Semifinal', 'Disputa de 3º lugar', 'Final', 'Amistoso', 'Eliminatória'];
 
-export const blankForm = (tournamentId: string, sportId = ''): MatchFormState => ({
+export const blankForm = (tournamentId: string, sportId = '', gender: Gender = 'M'): MatchFormState => ({
   tournamentId,
   sportId,
-  gender: 'M',
+  gender,
   phase: '',
   group: '',
   title: '',
@@ -54,6 +60,7 @@ export const blankForm = (tournamentId: string, sportId = ''): MatchFormState =>
   backupMesarioId: '',
   countsForStandings: true,
   notes: '',
+  robotOff: false,
   status: 'SCHEDULED',
   participants: [],
 });
@@ -66,14 +73,22 @@ export function MatchFormSheet({ open, onClose, editId, initial }: { open: boole
   const [f, setF] = useState<MatchFormState | null>(null);
   const [statusTouched, setStatusTouched] = useState(false);
 
-  const q = useQuery({ queryKey: ['admin', 'match', editId], queryFn: () => get<any>(`/admin/matches/${editId}`), enabled: open && !!editId });
+  const q = useQuery({ queryKey: ['admin', 'match', editId], queryFn: () => get<any>(`/admin/matches/${editId}`), enabled: open && !!editId, staleTime: 0 });
 
+  // preenche UMA vez por abertura: dado novo chegando depois não apaga o que você digitou
+  const seeded = useRef<string | null>(null);
   useEffect(() => {
-    if (!open) return setF(null);
+    if (!open) {
+      seeded.current = null;
+      return setF(null);
+    }
+    const key = editId ?? 'new';
+    if (seeded.current === key) return;
     setStatusTouched(false);
     if (editId) {
       const m = q.data?.match;
-      if (!m) return;
+      if (!m || q.isFetching) return;
+      seeded.current = key;
       setF({
         tournamentId: m.tournamentId,
         sportId: m.sportId,
@@ -88,16 +103,25 @@ export function MatchFormSheet({ open, onClose, editId, initial }: { open: boole
         mesarioId: m.mesarioId ?? '',
         backupMesarioId: m.backupMesarioId ?? '',
         countsForStandings: m.countsForStandings,
-        notes: m.notes ?? '',
+        ...splitNotes(m.notes),
         status: ['POSTPONED', 'CANCELED'].includes(m.status) ? m.status : 'SCHEDULED',
         participants: (m.participants ?? []).map((p: any) => ({ id: p.id, institutionId: p.institutionId, athleteName: p.athleteName ?? '', lane: p.lane })),
       });
-    } else setF(initial ?? blankForm(tournamentId ?? '', sports.find((s) => s.active)?.id));
-  }, [open, editId, q.data, initial]); // eslint-disable-line react-hooks/exhaustive-deps
+    } else {
+      seeded.current = key;
+      const first = sports.find((s) => s.active);
+      setF(initial ?? blankForm(tournamentId ?? '', first?.id, first?.genders[0]));
+    }
+  }, [open, editId, q.data, q.isFetching, initial]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const s = sport(f?.sportId);
   const isRanking = s?.engine === 'RANKING';
   const eligible = useMemo(() => users.filter((u) => u.active && (u.role === 'ADMIN' || (f && u.sportIds.includes(f.sportId)))), [users, f?.sportId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // quem já está escalado mas não pode mais (desativado / perdeu a modalidade) continua visível
+  const stale = (uid?: string) => (uid && !eligible.some((u) => u.id === uid) ? users.find((u) => u.id === uid) : undefined);
+  const sbTournament = !!tournaments.find((t) => t.id === f?.tournamentId)?.isSandbox;
+  // torneio real não usa atlética de teste (o "limpar sandbox" apagaria ela)
+  const teams = useMemo(() => institutions.filter((i) => sbTournament || !i.isSandbox), [institutions, sbTournament]);
 
   const save = useAction(
     async (st: MatchFormState) => {
@@ -115,13 +139,13 @@ export function MatchFormSheet({ open, onClose, editId, initial }: { open: boole
         mesarioId: n(st.mesarioId),
         backupMesarioId: n(st.backupMesarioId),
         countsForStandings: st.countsForStandings,
-        notes: n(st.notes),
+        notes: n(`${st.notes.replace(ROBOT_TAG, '').trim()}${st.robotOff ? ' #manual' : ''}`),
         ...(isRanking && { participants: st.participants.filter((p) => p.institutionId).map((p) => ({ ...(p.id && { id: p.id }), institutionId: p.institutionId, athleteName: n(p.athleteName), lane: p.lane })) }),
       };
       if (!editId || statusTouched) body.status = st.status;
       return editId ? patch(`/admin/matches/${editId}`, body) : post('/admin/matches', body);
     },
-    { ok: editId ? 'Jogo atualizado' : 'Jogo criado', invalidate: [['admin', 'matches'], ['admin', 'dashboard'], ['admin', 'match', editId]], onDone: onClose },
+    { ok: editId ? 'Jogo atualizado' : 'Jogo criado', invalidate: MATCH_DATA_KEYS, onDone: onClose },
   );
 
   const set = <K extends keyof MatchFormState>(k: K, v: MatchFormState[K]) => setF((x) => (x ? { ...x, [k]: v } : x));
@@ -230,7 +254,7 @@ export function MatchFormSheet({ open, onClose, editId, initial }: { open: boole
                         {inst ? <TeamFlag inst={inst} size={28} /> : <span className="h-7 w-7 shrink-0 rounded-full bg-white/10" />}
                         <Select value={p.institutionId} onChange={(v) => upd({ institutionId: v })} className="max-w-[180px]">
                           <option value="">Atlética…</option>
-                          {institutions.map((x) => (
+                          {teams.map((x) => (
                             <option key={x.id} value={x.id}>
                               {x.name}
                             </option>
@@ -259,7 +283,7 @@ export function MatchFormSheet({ open, onClose, editId, initial }: { open: boole
                       {inst ? <TeamFlag inst={inst} size={40} /> : <span className="h-10 w-10 shrink-0 rounded-full bg-white/[0.06]" />}
                       <Select value={f[k]} onChange={(v) => set(k, v)}>
                         <option value="">Escolha a atlética…</option>
-                        {institutions.map((x) => (
+                        {teams.map((x) => (
                           <option key={x.id} value={x.id} disabled={x.id === (k === 'homeId' ? f.awayId : f.homeId)}>
                             {x.name}
                             {x.university ? ` · ${x.university}` : ''}
@@ -277,6 +301,7 @@ export function MatchFormSheet({ open, onClose, editId, initial }: { open: boole
           <Field label="Mesário titular" hint={f.sportId && !eligible.some((u) => u.role === 'MESARIO') ? 'Nenhum mesário habilitado nesta modalidade (ver Equipe).' : undefined}>
             <Select value={f.mesarioId} onChange={(v) => set('mesarioId', v)}>
               <option value="">— sem mesário —</option>
+              {stale(f.mesarioId) && <option value={f.mesarioId}>{stale(f.mesarioId)!.name} (não habilitado — troque)</option>}
               {eligible.map((u) => (
                 <option key={u.id} value={u.id} disabled={u.id === f.backupMesarioId}>
                   {u.name}
@@ -288,6 +313,7 @@ export function MatchFormSheet({ open, onClose, editId, initial }: { open: boole
           <Field label="Mesário reserva" hint="Só registra quando você liberar na hora.">
             <Select value={f.backupMesarioId} onChange={(v) => set('backupMesarioId', v)}>
               <option value="">— sem reserva —</option>
+              {stale(f.backupMesarioId) && <option value={f.backupMesarioId}>{stale(f.backupMesarioId)!.name} (não habilitado — troque)</option>}
               {eligible.map((u) => (
                 <option key={u.id} value={u.id} disabled={u.id === f.mesarioId}>
                   {u.name}
@@ -313,8 +339,13 @@ export function MatchFormSheet({ open, onClose, editId, initial }: { open: boole
             <Toggle checked={f.countsForStandings} onChange={(v) => set('countsForStandings', v)} label="Conta pra classificação" hint="Desligue em amistosos/exibição" />
           </div>
           <Field label="Observações" className="sm:col-span-2">
-            <textarea className="field min-h-[70px]" value={f.notes} onChange={(e) => set('notes', e.target.value)} maxLength={500} />
+            <textarea className="field min-h-[70px]" value={f.notes} onChange={(e) => set('notes', e.target.value)} maxLength={490} />
           </Field>
+          {sbTournament && (
+            <div className="sm:col-span-2">
+              <Toggle checked={f.robotOff} onChange={(v) => set('robotOff', v)} label="Robô do sandbox não mexe neste jogo" hint="Pra testar a mesa na mão sem o simulador registrar lances junto" />
+            </div>
+          )}
         </div>
       )}
     </Sheet>
@@ -332,6 +363,7 @@ interface BulkRow {
 
 export function BulkSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { tournamentId, sports, institutions, sport, refresh } = useAdmin();
+  const qc = useQueryClient();
   const [sportId, setSportId] = useState('');
   const [gender, setGender] = useState<Gender>('M');
   const [date, setDate] = useState(() => toLocalInput(new Date().toISOString()).slice(0, 10));
@@ -367,6 +399,7 @@ export function BulkSheet({ open, onClose }: { open: boolean; onClose: () => voi
     }
     setBusy(false);
     refresh();
+    for (const k of MATCH_DATA_KEYS) void qc.invalidateQueries({ queryKey: k });
     if (ok) {
       toast.ok(`${ok} jogo(s) criado(s)`);
       onClose();

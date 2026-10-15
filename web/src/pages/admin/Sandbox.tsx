@@ -85,7 +85,7 @@ export default function Sandbox() {
             </div>
           </div>
           <Field label={`Velocidade · ${speed}x (um passo a cada ${(2.5 / speed).toFixed(2).replace('.', ',')}s)`}>
-            <input type="range" min={0} max={SPEEDS.length - 1} value={speedIdx} onChange={(e) => setSpeedIdx(Number(e.target.value))} className="w-full accent-[#d7ff3e]" />
+            <input type="range" min={0} max={SPEEDS.length - 1} value={speedIdx} onChange={(e) => setSpeedIdx(Number(e.target.value))} className="w-full accent-[rgb(var(--brand))]" />
             <div className="flex justify-between text-[11px] text-mute-2">
               {SPEEDS.map((x) => (
                 <span key={x}>{x}x</span>

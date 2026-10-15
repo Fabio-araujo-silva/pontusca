@@ -262,7 +262,7 @@ export function HoldButton({
       style={{ background: 'rgb(var(--fg) / .08)', color: 'rgb(var(--fg))', touchAction: 'none' }}
     >
       <span className="absolute inset-y-0 left-0 -z-10" style={{ width: `${p * 100}%`, background: color }} />
-      <span className="relative z-10 inline-flex -translate-y-1.5 items-center gap-2 text-[16px]" style={{ color: p > 0.5 ? textColor : '#fff', transition: 'color .15s' }}>
+      <span className="relative z-10 inline-flex -translate-y-1.5 items-center gap-2 text-[16px]" style={{ color: p > 0.5 ? textColor : 'rgb(var(--fg))', transition: 'color .15s' }}>
         {children}
       </span>
       <span className="absolute bottom-2 left-0 right-0 z-10 text-center text-[10px] font-medium uppercase tracking-widest opacity-50">{p > 0 ? 'segurando…' : 'segure para confirmar'}</span>
@@ -345,8 +345,9 @@ export function Confirm({
       title={title}
       footer={
         hold ? (
-          <HoldButton onConfirm={onConfirm} color={danger ? '#e0261d' : '#111114'} textColor="#ffffff">
-            {confirmLabel}
+          // enquanto envia, não aceita segurar de novo (evita mandar 2 vezes)
+          <HoldButton onConfirm={onConfirm} color={danger ? '#e0261d' : '#111114'} textColor="#ffffff" disabled={loading}>
+            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : confirmLabel}
           </HoldButton>
         ) : (
           <div className="flex gap-2">

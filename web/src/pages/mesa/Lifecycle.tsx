@@ -135,7 +135,7 @@ function ConfirmLifecycle({
         key={v}
         onClick={() => (action === 'START_MATCH' ? setServer(v as Side) : setWinner(v))}
         className={cx('flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl px-2 text-[14px] font-bold ring-2 transition active:scale-95', on ? 'ring-white' : 'ring-transparent opacity-70')}
-        style={{ background: color ?? 'rgb(var(--fg) / .08)', color: fg ?? '#fff' }}
+        style={{ background: color ?? 'rgb(var(--fg) / .08)', color: fg ?? 'rgb(var(--fg))' }}
       >
         {label}
       </button>

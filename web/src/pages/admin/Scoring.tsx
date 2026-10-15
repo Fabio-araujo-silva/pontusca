@@ -10,7 +10,7 @@ import { TeamFlag } from '@/components/ui/TeamFlag';
 import { del, get, post, put } from '@/lib/api';
 import { fmtScore, GENDER } from '@/lib/format';
 import { useAdmin } from './ctx';
-import { Field, move, MoveButtons, NumInput, PageHeader, Select, useAction } from './ui';
+import { confirmDiscard, Field, move, MoveButtons, NumInput, PageHeader, Select, useAction } from './ui';
 
 interface Rule {
   id?: string;
@@ -326,6 +326,9 @@ function Placements({ data, inv }: { data: ScoringData; inv: unknown[] }) {
     );
     setDirty(false);
   }, [data.placements, sportId, gender]);
+  useEffect(() => {
+    if (s && s.genders.length && !s.genders.includes(gender)) setGender(s.genders[0]);
+  }, [s, gender]);
 
   const save = useAction(() => put('/admin/scoring/placements', { tournamentId, sportId, gender, items: list.map((institutionId, i) => ({ institutionId, position: i + 1 })) }), { ok: 'Classificação salva', invalidate: [inv], onDone: () => setDirty(false) });
   const done = new Set(data.placements.map((p) => `${p.sportId}|${p.gender}`));
@@ -338,14 +341,14 @@ function Placements({ data, inv }: { data: ScoringData; inv: unknown[] }) {
     <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
       <section className="card p-4">
         <div className="mb-4 flex flex-wrap gap-2">
-          <Select value={sportId} onChange={(v) => { setSportId(v); const ns = sport(v); if (ns && !ns.genders.includes(gender)) setGender(ns.genders[0]); }} className="w-56">
+          <Select value={sportId} onChange={(v) => { if (!confirmDiscard(dirty)) return; setSportId(v); const ns = sport(v); if (ns && !ns.genders.includes(gender)) setGender(ns.genders[0]); }} className="w-56">
             {sports.map((x) => (
               <option key={x.id} value={x.id}>
                 {x.name}
               </option>
             ))}
           </Select>
-          <Select value={gender} onChange={(v) => setGender(v as Gender)} className="w-36">
+          <Select value={gender} onChange={(v) => confirmDiscard(dirty) && setGender(v as Gender)} className="w-36">
             {(s?.genders ?? (['M', 'F', 'X'] as Gender[])).map((g) => (
               <option key={g} value={g}>
                 {GENDER[g]}
@@ -360,7 +363,7 @@ function Placements({ data, inv }: { data: ScoringData; inv: unknown[] }) {
             const it = inst(id);
             return (
               <div key={id} className="flex items-center gap-3 rounded-xl bg-ink-800 px-3 py-2 ring-1 ring-white/10">
-                <span className={cx('w-8 font-display text-[20px] font-extrabold', i === 0 ? 'text-yellow-300' : i === 1 ? 'text-slate-300' : i === 2 ? 'text-amber-600' : 'text-mute')}>{i + 1}º</span>
+                <span className={cx('w-8 font-display text-[20px] font-extrabold', i === 0 ? 'text-yellow-600' : i === 1 ? 'text-slate-500' : i === 2 ? 'text-amber-700' : 'text-mute')}>{i + 1}º</span>
                 {it && <TeamFlag inst={it} size={28} />}
                 <span className="flex-1 text-[14px] font-semibold">{it?.name ?? '?'}</span>
                 <MoveButtons index={i} length={list.length} onMove={(a, b) => upd(move(list, a, b))} />
@@ -398,7 +401,7 @@ function Placements({ data, inv }: { data: ScoringData; inv: unknown[] }) {
               const champ = data.placements.find((p) => p.sportId === sid && p.gender === g && p.position === 1);
               return (
                 <li key={k}>
-                  <button className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] hover:bg-white/[0.05]" onClick={() => { setSportId(sid); setGender(g as Gender); }}>
+                  <button className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] hover:bg-white/[0.05]" onClick={() => { if (!confirmDiscard(dirty)) return; setSportId(sid); setGender(g as Gender); }}>
                     <SportIcon name={sport(sid)?.icon} size={15} />
                     <span className="flex-1 truncate">
                       {sport(sid)?.name} {GENDER[g as Gender]}

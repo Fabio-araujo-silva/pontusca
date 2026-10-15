@@ -134,7 +134,11 @@ export class LiveService implements OnApplicationBootstrap {
       if (cmd.athleteId && !e.names[cmd.athleteId]) throw new BadRequestException('Atleta fora da escalação deste jogo.');
       if (cmd.athlete2Id && !e.names[cmd.athlete2Id]) throw new BadRequestException('Atleta fora da escalação deste jogo.');
 
-      const now = Date.now();
+      // hora do toque no aparelho (fila offline): vale se não for do futuro, não for
+      // anterior ao último lance e tiver no máximo 30 min. Senão, agora.
+      const serverNow = Date.now();
+      const lastAt = e.events.length ? e.events[e.events.length - 1].at : 0;
+      const now = cmd.at && cmd.at <= serverNow + 2000 && serverNow - cmd.at <= 30 * 60_000 ? Math.min(serverNow, Math.max(cmd.at, lastAt)) : serverNow;
       let draft;
       try {
         draft = buildEvent(this.input(e), e.out, cmd, now);
@@ -181,6 +185,7 @@ export class LiveService implements OnApplicationBootstrap {
         clientId: cmd.clientId,
         score: `${e.summary.score.home}x${e.summary.score.away}`,
         phase: e.summary.live.phase,
+        ...(serverNow - now > 1500 && { lateMs: serverNow - now }),
       });
       return { summary: e.summary, event: ev, duplicate: false };
     });

@@ -117,8 +117,9 @@ export default function Console() {
   const cfg = engine.config;
   const manual = !!engine.manual;
   const ended = out.status === 'FINISHED';
+  const frozen = detail.status === 'POSTPONED' || detail.status === 'CANCELED';
   const readOnly = !meta.canOperate;
-  const disabled = readOnly || manual || ended;
+  const disabled = readOnly || manual || ended || frozen;
   const askEv = c.ask ? c.findEvent(c.ask.eventId) : null;
   const asking = askEv && missingAuthor(askEv, cfg) && !disabled ? askEv : null;
   const pickMore = async (step: 1 | 2) => {
@@ -160,7 +161,7 @@ export default function Console() {
             </div>
             <div className="truncate text-[11px] text-mute">{[detail.phase, detail.group && `Grupo ${detail.group}`, detail.venue, meta.tournament?.name].filter(Boolean).join(' · ')}</div>
           </div>
-          <SyncBadge connected={c.connected} pending={c.pending} issue={c.syncIssue} />
+          <SyncBadge connected={c.connected} pending={c.pending} issue={c.syncIssue || !!c.blocked} />
           {cfg.engine !== 'RANKING' && (
             <IconButton label="Escalação" onClick={() => setLineupOpen(true)}>
               <Users className="h-5 w-5" />
@@ -184,6 +185,20 @@ export default function Console() {
           </div>
         )}
         {meta.role === 'backup' && meta.canOperate && <div className="rounded-2xl bg-brand/10 px-3 py-2 text-[13px] font-semibold text-brand ring-1 ring-brand/30">Liberado pelo admin: você está registrando como reserva.</div>}
+        {c.blocked && c.pending > 0 && (
+          <div className="rounded-2xl bg-live/10 p-3 ring-1 ring-live/30">
+            <p className="text-[14px] font-bold text-live">
+              {c.pending} lance{c.pending > 1 ? 's' : ''} guardado{c.pending > 1 ? 's' : ''} no aparelho
+            </p>
+            <p className="mt-0.5 text-[13px] text-white/75">
+              {c.blocked === 'auth' ? 'Sua sessão expirou. Entre de novo e eles são enviados sozinhos.' : 'Você não tem permissão pra registrar neste jogo agora. Quando o admin liberar, eles são enviados sozinhos.'}
+            </p>
+            <button onClick={c.discardQueue} className="mt-2 text-[12px] font-semibold text-mute underline underline-offset-2">
+              Descartar esses lances
+            </button>
+          </div>
+        )}
+        {frozen && <div className="rounded-2xl bg-warn/10 px-3 py-3 text-[13px] font-semibold text-warn ring-1 ring-warn/30">Jogo {detail.status === 'POSTPONED' ? 'adiado' : 'cancelado'} pelo admin. O console fica bloqueado.</div>}
         {manual && <div className="rounded-2xl bg-white/[0.05] px-3 py-3 text-[13px] text-white/80">Resultado lançado manualmente pelo admin. O console fica bloqueado.</div>}
         {ended && !manual && (
           <div className="rounded-2xl bg-white/[0.05] px-4 py-3 text-[13px] text-white/80">
@@ -194,7 +209,7 @@ export default function Console() {
 
         {!disabled && <LifecycleBar out={out} cfg={cfg} home={meta.home} away={meta.away} send={c.send} />}
 
-        {!ended && !manual && (
+        {!ended && !manual && !frozen && (
           <section className={cx('relative', out.live.phase === 'PRE' && cfg.engine !== 'RANKING' && 'opacity-60')}>
             {out.live.phase === 'PRE' && cfg.engine !== 'RANKING' && !readOnly && <p className="mb-2 text-center text-[12px] font-semibold uppercase tracking-wider text-mute">Inicie o jogo para registrar lances</p>}
             {panel}
@@ -272,6 +287,7 @@ export default function Console() {
         onAdd={c.addAthlete}
       />
       <MoreSheet
+        sandbox={detail.isSandbox}
         open={moreOpen}
         onClose={() => setMoreOpen(false)}
         out={out}

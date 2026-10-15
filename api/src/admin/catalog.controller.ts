@@ -498,6 +498,7 @@ export class UsersController {
     if (!cur) throw new NotFoundException();
     if (cur.role === 'ADMIN' && (b.role === 'MESARIO' || b.active === false)) await this.assertNotLastAdmin(id);
     if (id === me.id && b.active === false) throw new BadRequestException('Você não pode se desativar.');
+    if (b.email && b.email !== cur.email && (await this.prisma.user.findUnique({ where: { email: b.email } }))) throw new BadRequestException('Já existe alguém com esse e-mail.');
     await this.prisma.user.update({
       where: { id },
       data: {

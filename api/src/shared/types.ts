@@ -283,6 +283,7 @@ export interface MatchDetail extends MatchSummary {
 
 export interface MatchCommand {
   clientId: string; // uuid gerado no aparelho -> idempotência em retry offline
+  at?: number; // hora do toque (relógio do servidor): lance que chega atrasado (sem sinal) fica no minuto certo
   type:
     | LifecycleAction
     | 'CLOCK_SET'

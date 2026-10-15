@@ -41,7 +41,7 @@ export function Toggle({ checked, onChange, label, hint }: { checked: boolean; o
         {hint && <span className="block text-[12px] text-mute">{hint}</span>}
       </span>
       <span className={cx('relative h-6 w-10 shrink-0 rounded-full transition', checked ? 'bg-brand' : 'bg-white/15')}>
-        <span className={cx('absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all', checked ? 'left-[18px] bg-brand-ink' : 'left-0.5')} style={checked ? { background: '#0a0b00' } : undefined} />
+        <span className={cx('absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-snow shadow transition-transform duration-200', checked && 'translate-x-4')} />
       </span>
     </button>
   );
@@ -114,13 +114,13 @@ export function Chip({ active, onClick, children, className }: { active?: boolea
 }
 
 export function SandboxBadge() {
-  return <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300">sandbox</span>;
+  return <span className="rounded-full bg-warn/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-warn">sandbox</span>;
 }
 
 const STATUS_STYLE: Record<string, string> = {
   SCHEDULED: 'bg-white/[0.07] text-white/70',
   FINISHED: 'bg-white/[0.07] text-white/50',
-  POSTPONED: 'bg-amber-400/15 text-amber-300',
+  POSTPONED: 'bg-warn/15 text-warn',
   CANCELED: 'bg-live/15 text-live',
 };
 const STATUS_TEXT: Record<string, string> = { SCHEDULED: 'Agendado', FINISHED: 'Encerrado', POSTPONED: 'Adiado', CANCELED: 'Cancelado' };
@@ -190,6 +190,12 @@ export const fromLocalInput = (v: string) => `${v}:00-03:00`;
 export const toDateInput = (iso?: string | null) => (iso ? toLocalInput(iso).slice(0, 10) : '');
 
 // ---------------------------------------------------------------- mutações com toast
+
+/** Tudo que mostra dado derivado de jogos: invalidar junto em qualquer mudança de jogo. */
+export const MATCH_DATA_KEYS: unknown[][] = [['admin', 'matches'], ['admin', 'match'], ['admin', 'dashboard'], ['admin', 'users'], ['admin', 'tournaments'], ['admin', 'institutions'], ['admin', 'sports']];
+
+/** Troca de seleção com edição não salva: pergunta antes de descartar. */
+export const confirmDiscard = (dirty: boolean) => !dirty || window.confirm('Você tem alterações não salvas. Descartar e trocar?');
 
 export function useAction<A extends unknown[], R>(fn: (...args: A) => Promise<R>, opts: { ok?: string | ((r: R) => string); invalidate?: unknown[][]; onDone?: (r: R) => void } = {}) {
   const qc = useQueryClient();

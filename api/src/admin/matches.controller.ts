@@ -346,6 +346,11 @@ export class MatchesController {
     if (!sport) throw new BadRequestException('Modalidade não encontrada.');
     const t = await this.prisma.tournament.findUnique({ where: { id: b.tournamentId } });
     if (!t) throw new BadRequestException('Torneio não encontrado.');
+    if (!t.isSandbox) {
+      const ids = [b.homeId, b.awayId].filter((x): x is string => !!x);
+      if (ids.length && (await this.prisma.institution.count({ where: { id: { in: ids }, isSandbox: true } })))
+        throw new BadRequestException('Atlética de teste (sandbox) não pode jogar em torneio real.');
+    }
     if (sport.engine === 'RANKING') {
       if (!b.title) throw new BadRequestException('Dê um nome pra prova (ex.: 100m rasos).');
     } else {

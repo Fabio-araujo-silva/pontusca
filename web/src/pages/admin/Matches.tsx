@@ -2,7 +2,7 @@
 // (editar, duplicar, resultado manual, reserva, elencos, zerar, excluir).
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ClipboardList, Copy, Eye, ListPlus, Lock, LockOpen, MonitorPlay, Pencil, Plus, RotateCcw, Search, Shirt, Trash2, Trophy, UserPlus } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { MatchSummary } from '@shared/types';
 import { Button, Confirm, cx, Empty, Sheet, Spinner } from '@/components/ui/primitives';
 import { TeamFlag } from '@/components/ui/TeamFlag';
@@ -11,8 +11,8 @@ import { dayChip, dayKey, fmtScore, longDate, timeHM } from '@/lib/format';
 import { useRooms, useSocketEvent } from '@/lib/socket';
 import { AdminMatchRow, useAdmin } from './ctx';
 import { StaffButton, StaffPicker, StaffRole } from './Staff';
-import { BulkSheet, MatchFormSheet, MatchFormState } from './MatchForm';
-import { Field, MatchLine, NumInput, PageHeader, Select, StatusPill, toLocalInput, useAction } from './ui';
+import { BulkSheet, MatchFormSheet, MatchFormState, splitNotes } from './MatchForm';
+import { Field, MATCH_DATA_KEYS, MatchLine, NumInput, PageHeader, Select, StatusPill, toLocalInput, useAction } from './ui';
 
 const STATUS_FILTERS = [
   ['', 'Todos'],
@@ -189,7 +189,7 @@ export default function Matches() {
               mesarioId: m.mesarioId ?? '',
               backupMesarioId: m.backupMesarioId ?? '',
               countsForStandings: m.countsForStandings,
-              notes: m.notes ?? '',
+              ...splitNotes(m.notes),
               status: 'SCHEDULED',
               participants: (m.participants ?? []).map((p: any) => ({ institutionId: p.institutionId, athleteName: p.athleteName ?? '', lane: p.lane })),
             },
@@ -219,7 +219,7 @@ function Row({ r, onOpen, onEdit }: { r: AdminMatchRow; onOpen: () => void; onEd
       </div>
       <div className="flex items-center gap-2">
         <StatusPill m={m} />
-        {m.manual && <span className="rounded-full bg-sky-400/15 px-2 py-0.5 text-[10px] font-bold uppercase text-sky-300">manual</span>}
+        {m.manual && <span className="rounded-full bg-pop-blue/10 px-2 py-0.5 text-[10px] font-bold uppercase text-pop-blue">manual</span>}
       </div>
       <div className="flex w-full flex-col items-start leading-tight md:w-44 md:items-end" onClick={(e) => e.stopPropagation()}>
         <StaffButton r={r} role="mesario" />
@@ -241,8 +241,7 @@ function Row({ r, onOpen, onEdit }: { r: AdminMatchRow; onOpen: () => void; onEd
 }
 
 function ActionsSheet({ r, onClose, onEdit, onDuplicate }: { r: AdminMatchRow | null; onClose: () => void; onEdit: (id: string) => void; onDuplicate: (id: string) => void }) {
-  const { tournamentId } = useAdmin();
-  const inv = [['admin', 'matches', tournamentId], ['admin', 'dashboard']];
+  const inv = MATCH_DATA_KEYS;
   const [confirm, setConfirm] = useState<'reset' | 'delete' | null>(null);
   const [result, setResult] = useState(false);
   const [staff, setStaff] = useState<StaffRole | null>(null);
@@ -308,7 +307,7 @@ function ActionsSheet({ r, onClose, onEdit, onDuplicate }: { r: AdminMatchRow | 
                 </button>
               )}
               <div className="my-1 h-px bg-white/[0.06]" />
-              <button className={cx(item, 'text-amber-300')} onClick={() => setConfirm('reset')}>
+              <button className={cx(item, 'text-warn')} onClick={() => setConfirm('reset')}>
                 <RotateCcw className="h-4 w-4" /> Zerar lances
               </button>
               <button className={cx(item, 'text-live')} onClick={() => setConfirm('delete')}>
@@ -330,7 +329,7 @@ function ActionsSheet({ r, onClose, onEdit, onDuplicate }: { r: AdminMatchRow | 
 }
 
 function ResultSheet({ open, m, onClose }: { open: boolean; m: MatchSummary | null; onClose: () => void }) {
-  const { inst, tournamentId } = useAdmin();
+  const { inst } = useAdmin();
   const [home, setHome] = useState<number | null>(null);
   const [away, setAway] = useState<number | null>(null);
   const [winner, setWinner] = useState('');
@@ -343,9 +342,25 @@ function ResultSheet({ open, m, onClose }: { open: boolean; m: MatchSummary | nu
     setWinner('');
     setNote('');
   }
+  // editando um resultado manual: traz o vencedor (ex.: nos pênaltis) e a observação já lançados
+  useEffect(() => {
+    if (!open || !m?.manual) return;
+    let off = false;
+    void get<{ match: { manualResult: { home: number; away: number; winner?: string | null; note?: string | null } | null } }>(`/admin/matches/${m.id}`).then((r) => {
+      const mr = r.match.manualResult;
+      if (off || !mr) return;
+      setHome(mr.home);
+      setAway(mr.away);
+      setWinner(mr.winner ?? '');
+      setNote(mr.note ?? '');
+    });
+    return () => {
+      off = true;
+    };
+  }, [open, m?.id, m?.manual]);
   const save = useAction(() => put(`/admin/matches/${m!.id}/result`, { home: home ?? 0, away: away ?? 0, winner: winner || null, note: note || null }), {
     ok: 'Resultado lançado',
-    invalidate: [['admin', 'matches', tournamentId], ['admin', 'dashboard']],
+    invalidate: MATCH_DATA_KEYS,
     onDone: () => (setSeeded(null), onClose()),
   });
   const h = inst(m?.homeId);

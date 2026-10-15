@@ -148,7 +148,9 @@ export class SandboxService implements OnApplicationBootstrap, OnModuleDestroy {
     sports = order;
 
     // mesário de teste: os jogos sandbox aparecem em /mesa pra quem quiser testar o console
-    const mesario = await this.prisma.user.findFirst({ where: { role: 'MESARIO', active: true }, orderBy: { createdAt: 'asc' } });
+    // (só quem está habilitado na modalidade do jogo, senão editar o jogo depois falha)
+    const mesarios = await this.prisma.user.findMany({ where: { role: 'MESARIO', active: true }, include: { sports: true }, orderBy: { createdAt: 'asc' } });
+    const mesarioFor = (sportId: string) => mesarios.find((u) => u.sports.some((s) => s.sportId === sportId))?.id ?? null;
 
     const ids: string[] = [];
     for (let i = 0; i < total; i++) {
@@ -173,7 +175,7 @@ export class SandboxService implements OnApplicationBootstrap, OnModuleDestroy {
         venue: pick(VENUES),
         scheduledAt,
         isSandbox: true,
-        mesarioId: mesario?.id ?? null,
+        mesarioId: mesarioFor(sport.id),
       };
       let id: string;
       if (cfg.engine === 'RANKING') {

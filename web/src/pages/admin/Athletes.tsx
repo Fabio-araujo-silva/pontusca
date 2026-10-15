@@ -2,7 +2,7 @@
 // (com "colar lista" pra subir um time inteiro de uma vez).
 import { useQuery } from '@tanstack/react-query';
 import { ClipboardPaste, Pencil, Plus, Save, Shirt, Trash2, UserPlus } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Gender } from '@shared/types';
 import { Button, Confirm, cx, Empty, Sheet, Spinner } from '@/components/ui/primitives';
 import { SportIcon } from '@/components/ui/SportIcon';
@@ -10,7 +10,7 @@ import { TeamFlag } from '@/components/ui/TeamFlag';
 import { del, get, patch, post, put } from '@/lib/api';
 import { GENDER } from '@/lib/format';
 import { useAdmin } from './ctx';
-import { Field, NumInput, PageHeader, Select, useAction } from './ui';
+import { confirmDiscard, Field, NumInput, PageHeader, Select, useAction } from './ui';
 
 interface Athlete {
   id: string;
@@ -55,10 +55,19 @@ export default function Athletes() {
 
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [dirty, setDirty] = useState(false);
+  // recarrega do servidor ao trocar de elenco; um refetch no meio da edição não apaga o que mudou
+  const seededKey = useRef('');
   useEffect(() => {
+    const k = rKey.join('|');
+    if (dirty && seededKey.current === k) return;
+    seededKey.current = k;
     setRoster((rq.data ?? []).map((r) => ({ athleteId: r.athleteId, number: r.number, position: r.position })));
     setDirty(false);
-  }, [rq.data]);
+  }, [rq.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  // naipe que a modalidade não tem (ex.: só misto) -> o primeiro que ela tem
+  useEffect(() => {
+    if (s && s.genders.length && !s.genders.includes(gender)) setGender(s.genders[0]);
+  }, [s, gender]);
 
   const athletes = aq.data ?? [];
   const byId = useMemo(() => new Map(athletes.map((a) => [a.id, a])), [athletes]);
@@ -92,7 +101,7 @@ export default function Athletes() {
 
       <div className="scroll-x -mx-4 mb-5 gap-2 px-4">
         {institutions.map((i) => (
-          <button key={i.id} onClick={() => setInstId(i.id)} className={cx('flex shrink-0 items-center gap-2 rounded-full py-1 pl-1 pr-3.5 text-[13px] font-semibold transition', i.id === instId ? 'bg-white text-black' : 'bg-white/[0.06] text-white/75 hover:bg-white/[0.1]')}>
+          <button key={i.id} onClick={() => confirmDiscard(dirty) && setInstId(i.id)} className={cx('flex shrink-0 items-center gap-2 rounded-full py-1 pl-1 pr-3.5 text-[13px] font-semibold transition', i.id === instId ? 'bg-white text-black' : 'bg-white/[0.06] text-white/75 hover:bg-white/[0.1]')}>
             <TeamFlag inst={i} size={26} />
             {i.name}
           </button>
@@ -109,7 +118,7 @@ export default function Athletes() {
               <h2 className="mr-auto flex items-center gap-2 text-[15px] font-bold">
                 <Shirt className="h-4 w-4 text-brand" /> Elenco
               </h2>
-              <Select value={sportId} onChange={(v) => { setSportId(v); const ns = sport(v); if (ns && !ns.genders.includes(gender)) setGender(ns.genders[0]); }} className="h-9 w-48 py-1 text-[13px]">
+              <Select value={sportId} onChange={(v) => { if (!confirmDiscard(dirty)) return; setSportId(v); const ns = sport(v); if (ns && !ns.genders.includes(gender)) setGender(ns.genders[0]); }} className="h-9 w-48 py-1 text-[13px]">
                 {sports
                   .filter((x) => x.engine !== 'RANKING')
                   .map((x) => (
@@ -118,7 +127,7 @@ export default function Athletes() {
                     </option>
                   ))}
               </Select>
-              <Select value={gender} onChange={(v) => setGender(v as Gender)} className="h-9 w-32 py-1 text-[13px]">
+              <Select value={gender} onChange={(v) => confirmDiscard(dirty) && setGender(v as Gender)} className="h-9 w-32 py-1 text-[13px]">
                 {(s?.genders ?? (['M', 'F', 'X'] as Gender[])).map((g) => (
                   <option key={g} value={g}>
                     {GENDER[g]}

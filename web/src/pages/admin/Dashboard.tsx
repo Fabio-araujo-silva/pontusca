@@ -12,7 +12,7 @@ import { timeHM } from '@/lib/format';
 import { useRooms, useSocketEvent } from '@/lib/socket';
 import { AdminMatchRow, useAdmin } from './ctx';
 import { StaffButton, StaffPicker, StaffRole } from './Staff';
-import { MatchLine, PageHeader, StatusPill, useAction } from './ui';
+import { MATCH_DATA_KEYS, MatchLine, PageHeader, StatusPill, useAction } from './ui';
 
 interface Presence {
   online: number;
@@ -60,7 +60,7 @@ export default function Dashboard() {
 
   const backup = useAction((id: string, enabled: boolean) => post(`/admin/matches/${id}/backup`, { enabled }), {
     ok: (r: any) => (r.backupEnabled ? 'Reserva liberado para registrar' : 'Reserva bloqueado'),
-    invalidate: [key],
+    invalidate: MATCH_DATA_KEYS,
   });
 
   // audiência é volátil e barata: consulta a cada 5 s
@@ -179,7 +179,7 @@ function LiveCard({ r, v, onBackup }: { r: AdminMatchRow; v?: Presence['matches'
       </div>
       <MatchLine m={m} />
       {m.lastEvent && (
-        <div className={cx('mt-3 truncate rounded-lg bg-white/[0.04] px-3 py-1.5 text-[12px]', stale ? 'text-amber-300' : 'text-white/70')}>
+        <div className={cx('mt-3 truncate rounded-lg bg-white/[0.04] px-3 py-1.5 text-[12px]', stale ? 'font-semibold text-warn' : 'text-white/70')}>
           Último lance: {m.lastEvent.label} · {timeHM(m.lastEvent.at)}
         </div>
       )}

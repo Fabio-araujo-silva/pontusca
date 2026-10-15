@@ -67,13 +67,30 @@ export function useConsole(id: string) {
   const [error, setError] = useState<string | null>(null);
   const [queue, setQueueState] = useState<QueueItem[]>(() => loadQueue(id));
   const [syncIssue, setSyncIssue] = useState(false);
+  // envio parado por permissão: 'auth' = sessão expirou; 'forbidden' = sem permissão agora
+  // (reserva bloqueado / trocaram o mesário). Os lances ficam guardados até resolver.
+  const [blocked, setBlocked] = useState<null | 'auth' | 'forbidden'>(null);
+  const blockedRef = useRef(blocked);
+  blockedRef.current = blocked;
+  // o servidor mudou enquanto a fila enviava: recarrega quando ela esvaziar
+  const dirty = useRef(false);
   const queueRef = useRef(queue);
   const inflight = useRef<string | null>(null);
   const flushing = useRef(false);
   const alive = useRef(true);
   const [ask, setAsk] = useState<AuthorAsk | null>(null);
   // clientId -> id do servidor (pra atribuir autor a um lance que já subiu)
-  const idMap = useRef<Record<string, string>>(loadIds(id));
+  const idMap = useRef<Record<string, string>>(
+    (() => {
+      if (loadQueue(id).length) return loadIds(id);
+      try {
+        localStorage.removeItem(idsKey(id));
+      } catch {
+        /* ignore */
+      }
+      return {};
+    })(),
+  );
   const resolveId = useCallback((eid: string) => (eid.startsWith('tmp-') ? (idMap.current[eid.slice(4)] ?? eid) : eid), []);
   const dataRef = useRef(data);
   dataRef.current = data;
@@ -94,8 +111,12 @@ export function useConsole(id: string) {
       if (!alive.current) return;
       setData(d);
       setError(null);
+      if (blockedRef.current === 'forbidden' && d.meta.canOperate) setBlocked(null);
     } catch (e: any) {
       if (!dataRef.current) setError(e.message || 'Falha ao carregar o jogo.');
+      // jogo apagado ou tiraram você dele: não deixa seguir operando "no escuro"
+      else if (e instanceof ApiError && e.status === 404) setError('Este jogo não existe mais (foi apagado pelo admin).');
+      else if (e instanceof ApiError && e.status === 403) setData((x) => (x ? { ...x, meta: { ...x.meta, canOperate: false } } : x));
     }
   }, [id]);
 
@@ -131,7 +152,7 @@ export function useConsole(id: string) {
 
   // ---- envio da fila
   const flush = useCallback(async () => {
-    if (flushing.current) return;
+    if (flushing.current || blockedRef.current) return;
     flushing.current = true;
     let delay = 1000;
     let mustReload = false;
@@ -170,13 +191,18 @@ export function useConsole(id: string) {
           } else mustReload = true;
           setQueue((q) => q.filter((x) => x.clientId !== item.clientId));
         } catch (e: any) {
-          if (!isNetwork(e)) {
+          if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+            // NÃO descarta: o lance aconteceu. Guarda até logar de novo / ser liberado.
+            report('warn', 'mesa.blocked', { msg: e.message, req: e.requestId, data: { match: id, status: e.status, queued: queueRef.current.length } });
+            setBlocked(e.status === 401 ? 'auth' : 'forbidden');
+            mustReload = e.status === 403;
+            break;
+          } else if (!isNetwork(e)) {
             report('warn', 'mesa.rejected', { msg: e.message, req: e.requestId, data: { match: id, status: e.status, cmd: item.cmd ?? null, assign: item.assign ?? null, queued: queueRef.current.length } });
             setQueue((q) => q.filter((x) => x.clientId !== item.clientId));
             toast.err(e.message || 'Lance recusado pelo servidor.');
             vibrate([40, 60, 40]);
             mustReload = true;
-            if (e.status === 401 || e.status === 403) break;
           } else {
             report('info', 'mesa.retry', { msg: e?.message, req: e?.requestId, data: { match: id, queued: queueRef.current.length, delay, online: navigator.onLine } });
             setSyncIssue(true);
@@ -189,8 +215,24 @@ export function useConsole(id: string) {
       inflight.current = null;
       flushing.current = false;
     }
-    if (mustReload && alive.current) await reload();
+    if ((mustReload || (dirty.current && !queueRef.current.length)) && alive.current) {
+      dirty.current = false;
+      await reload();
+    }
   }, [id, reload, setQueue, resolveId]);
+
+  /** Joga fora os lances guardados (quando o admin confirma que não valem). */
+  const discardQueue = useCallback(() => {
+    report('warn', 'mesa.queue_discarded', { data: { match: id, items: queueRef.current.map((q) => q.cmd?.type ?? 'assign') } });
+    setQueue(() => []);
+    setBlocked(null);
+    void reload();
+  }, [id, reload, setQueue]);
+
+  // liberado / logou de novo: volta a enviar
+  useEffect(() => {
+    if (!blocked) void flush();
+  }, [blocked, flush]);
 
   useEffect(() => {
     if (queueRef.current.length) void flush();
@@ -209,7 +251,8 @@ export function useConsole(id: string) {
       const o = outRef.current;
       if (!inp || !o) return false;
       const clientId = uuid();
-      const full = { ...cmd, clientId } as MatchCommand;
+      // hora do toque: se ficar na fila sem sinal, o lance entra no minuto certo
+      const full = { ...cmd, clientId, at: Math.round(serverNow()) } as MatchCommand;
       let draft;
       try {
         draft = buildEvent(inp, o, full, serverNow());
@@ -280,7 +323,7 @@ export function useConsole(id: string) {
         vibrate(20);
         return true;
       } catch (e: any) {
-        toast.err(e.message);
+        toast.err(e instanceof ApiError ? e.message : 'Sem sinal: desfazer um lance já enviado precisa de conexão.');
         return false;
       }
     },
@@ -325,9 +368,14 @@ export function useConsole(id: string) {
   const findEvent = useCallback((eid: string) => events.find((e) => e.id === eid || e.id === resolveId(eid)) ?? null, [events, resolveId]);
 
   // ---- tempo real
-  useRooms([`match:${id}`]);
+  useRooms([`match:${id}`, 'mesa']);
   useSocketEvent<{ summary: MatchSummary }>('summary', ({ summary }) => {
-    if (summary.id !== id || queueRef.current.length || flushing.current) return;
+    if (summary.id !== id) return;
+    // fila enviando: não recarrega agora (perderia o otimista), mas lembra de conferir depois
+    if (queueRef.current.length || flushing.current) {
+      dirty.current = true;
+      return;
+    }
     const d = dataRef.current;
     const o = outRef.current;
     if (!d || !o) return;
@@ -337,6 +385,10 @@ export function useConsole(id: string) {
   });
   useSocketEvent<{ matchId: string }>('staff:changed', (p) => {
     if (p.matchId === id) void reload();
+  });
+  // admin mudou a modalidade (botões/regras): recarrega a configuração
+  useSocketEvent('catalog:changed', () => {
+    if (!queueRef.current.length) void reload();
   });
   useEffect(() => {
     const vis = () => {
@@ -354,6 +406,8 @@ export function useConsole(id: string) {
     pending: queue.length,
     pendingIds,
     syncIssue,
+    blocked,
+    discardQueue,
     connected,
     send,
     voidEvent,

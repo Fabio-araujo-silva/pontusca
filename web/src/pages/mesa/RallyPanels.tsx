@@ -75,7 +75,7 @@ export function SetsPanel({ ctx }: { ctx: PanelCtx }) {
               side={side}
               value={between ? '0' : fmtScore(cur[i])}
               label="+1 ponto"
-              sub={`${S.label} ${between ? L.period + 1 : L.period} · ${ctx.out.score[side]} vencidos`}
+              sub={`${S.label} ${between ? L.period + 1 : L.period} · ${ctx.out.score[side]} vencido${ctx.out.score[side] === 1 ? '' : 's'}`}
               dim={blocked}
               onPress={() => ctx.send({ type: 'POINT', side })}
             />

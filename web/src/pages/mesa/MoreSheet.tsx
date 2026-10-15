@@ -17,6 +17,7 @@ export function MoreSheet({
   home,
   away,
   matchId,
+  sandbox,
   canOperate,
   send,
   onReload,
@@ -30,6 +31,7 @@ export function MoreSheet({
   home: InstitutionDTO | null;
   away: InstitutionDTO | null;
   matchId: string;
+  sandbox?: boolean;
   canOperate: boolean;
   send: (c: Cmd) => boolean;
   onReload: () => void;
@@ -103,7 +105,7 @@ export function MoreSheet({
           <Item icon={<StickyNote className="h-5 w-5" />} label="Observação na timeline" hint="Ex.: jogo paralisado pela chuva" disabled={!canOperate} onClick={() => setView('note')} />
           {cfg.engine !== 'RANKING' && <Item icon={<Flag className="h-5 w-5" />} label="Declarar W.O." hint="Uma equipe não compareceu" disabled={!canOperate || ended} onClick={() => setView('wo')} />}
           <Item icon={<RefreshCw className="h-5 w-5" />} label="Recarregar do servidor" hint="Se algo parecer diferente do placar público" onClick={() => (onReload(), onClose())} />
-          <Item icon={<ExternalLink className="h-5 w-5" />} label="Ver página pública" onClick={() => window.open(`/jogo/${matchId}`, '_blank')} />
+          <Item icon={<ExternalLink className="h-5 w-5" />} label="Ver página pública" onClick={() => window.open(`/jogo/${matchId}${sandbox ? '?sandbox=1' : ''}`, '_blank')} />
         </div>
       )}
       {view === 'note' && (
