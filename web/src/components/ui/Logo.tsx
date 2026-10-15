@@ -14,11 +14,12 @@ export function LogoMark({ size = 28, inverted }: { size?: number; inverted?: bo
   );
 }
 
-export function Logo({ size = 28, sub }: { size?: number; sub?: string }) {
+export function Logo({ size = 28, sub, compact }: { size?: number; sub?: string; compact?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-2.5">
+    <span className={`inline-flex items-center transition-all duration-300 ${compact ? 'gap-0' : 'gap-2.5'}`}>
       <LogoMark size={size} />
-      <span className="leading-none">
+      {/* ao rolar a página o nome recolhe e fica só o ".T" */}
+      <span className={`overflow-hidden whitespace-nowrap leading-none transition-all duration-300 ${compact ? 'max-w-0 opacity-0' : 'max-w-[200px] opacity-100'}`}>
         <span className="block font-display text-[26px] uppercase leading-[0.85] tracking-[0.01em]">Pontusca</span>
         {sub && <span className="mt-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-mute">{sub}</span>}
       </span>

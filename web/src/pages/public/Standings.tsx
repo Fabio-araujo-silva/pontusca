@@ -2,7 +2,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { ChevronDown, Trophy } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Gender, InstitutionDTO, StandingRow, StandingsDTO } from '@shared/types';
 import { cx, Empty, Segmented, Spinner } from '@/components/ui/primitives';
@@ -15,7 +15,11 @@ import { Chip } from '@/components/ui/Chip';
 import { usePublic } from './PublicLayout';
 
 export default function Standings() {
-  const { tournament, inst, sport } = usePublic();
+  const { tournament, inst, sport , setCompactTitle } = usePublic();
+  useEffect(() => {
+    setCompactTitle('Classificação');
+    return () => setCompactTitle(null);
+  }, [setCompactTitle]);
   const q = useQuery({
     queryKey: ['standings', tournament?.id],
     queryFn: () => get<StandingsDTO>(`/public/tournaments/${tournament!.id}/standings`),

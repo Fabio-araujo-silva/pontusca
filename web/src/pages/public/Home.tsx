@@ -19,7 +19,7 @@ import { usePublic } from './PublicLayout';
 const HEADER_OFFSET = SANDBOX ? 104 : 74; // cabeçalho fixo (+ faixa do sandbox)
 
 export default function Home() {
-  const { tournament, inst } = usePublic();
+  const { tournament, inst, setCompactTitle } = usePublic();
   const feed = useFeed(tournament?.id);
   const { profile } = useProfile();
   const prefs = useMemo(() => ({ atleticaId: profile.atleticaId, sportIds: profile.sportIds }), [profile.atleticaId, profile.sportIds]);
@@ -108,6 +108,13 @@ export default function Home() {
     window.addEventListener('hashchange', on);
     return () => window.removeEventListener('hashchange', on);
   }, [all, goTo]);
+
+  // título da barra recolhida: o dia que está na tela
+  useEffect(() => {
+    const c = dayChip(current, today);
+    setCompactTitle(`${c.top} · ${c.bottom}`);
+    return () => setCompactTitle(null);
+  }, [current, today, setCompactTitle]);
 
   // setas do teclado no desktop
   useEffect(() => {

@@ -141,6 +141,9 @@ export class SandboxService implements OnApplicationBootstrap, OnModuleDestroy {
     const order = [...shuffle(firsts), ...Array.from({ length: total }, () => pick(sports))].slice(0, total);
     sports = order;
 
+    // mesário de teste: os jogos sandbox aparecem em /mesa pra quem quiser testar o console
+    const mesario = await this.prisma.user.findFirst({ where: { role: 'MESARIO', active: true }, orderBy: { createdAt: 'asc' } });
+
     const ids: string[] = [];
     for (let i = 0; i < total; i++) {
       const sport = sports[i];
@@ -163,6 +166,7 @@ export class SandboxService implements OnApplicationBootstrap, OnModuleDestroy {
         venue: pick(VENUES),
         scheduledAt,
         isSandbox: true,
+        mesarioId: mesario?.id ?? null,
       };
       let id: string;
       if (cfg.engine === 'RANKING') {

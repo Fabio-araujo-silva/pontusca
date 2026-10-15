@@ -13,6 +13,7 @@ import { Bootstrap, useBootstrap, useFeed, useLiveSync } from '@/lib/data';
 import { useProfile } from '@/lib/profile';
 import { exitSandbox, SANDBOX } from '@/lib/sandbox';
 import { useConnected } from '@/lib/socket';
+import { useScrolled } from '@/lib/hooks';
 
 interface PublicCtx {
   boot: Bootstrap;
@@ -22,6 +23,8 @@ interface PublicCtx {
   /** jogo aberto (card expandido/página) recebe a comemoração em tela cheia */
   focused: string | null;
   setFocused: (id: string | null) => void;
+  /** texto no centro da barra quando ela encolhe (ex.: HOJE · 15 OUT) */
+  setCompactTitle: (t: string | null) => void;
 }
 
 const Ctx = createContext<PublicCtx>(null as any);
@@ -33,6 +36,8 @@ export default function PublicLayout() {
   const online = useConnected();
   const loc = useLocation();
   const [focused, setFocused] = useState<string | null>(null);
+  const [compactTitle, setCompactTitle] = useState<string | null>(null);
+  const compact = useScrolled();
   // o torneio é definido pelo admin ("torneio do momento"); o público não escolhe
   const tournament = b.data?.tournaments[0] ?? null;
   const { profile, save } = useProfile();
@@ -54,7 +59,7 @@ export default function PublicLayout() {
       </div>
     );
 
-  const ctx: PublicCtx = { boot: b.data, inst: b.inst, sport: b.sport, tournament, focused, setFocused };
+  const ctx: PublicCtx = { boot: b.data, inst: b.inst, sport: b.sport, tournament, focused, setFocused, setCompactTitle };
 
   return (
     <Ctx.Provider value={ctx}>
@@ -80,15 +85,31 @@ export default function PublicLayout() {
             ]}
           />
         )}
-        <header className="sticky top-0 z-30 border-b border-white/[0.05] bg-ink/85 px-4 pb-3 pt-[max(env(safe-area-inset-top),12px)] backdrop-blur-xl" style={SANDBOX ? { top: 30 } : undefined}>
-          <div className="flex items-center justify-between gap-3">
+        <header
+          className={cx(
+            'sticky top-0 z-30 px-4 backdrop-blur-xl transition-[padding,background-color,box-shadow] duration-300',
+            compact ? 'bg-ink/80 pb-2 pt-[max(env(safe-area-inset-top),8px)] shadow-[0_1px_0_rgb(var(--fg)/0.07)]' : 'bg-ink/95 pb-3 pt-[max(env(safe-area-inset-top),12px)]',
+          )}
+          style={SANDBOX ? { top: 30 } : undefined}
+        >
+          <div className="relative flex items-center justify-between gap-3">
             <NavLink to="/" aria-label="Início">
-              <Logo size={30} />
+              <Logo size={compact ? 26 : 30} compact={compact} />
             </NavLink>
+            {/* barra recolhida: só o contexto da tela no meio */}
+            <span
+              aria-hidden={!compact}
+              className={cx(
+                'pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap font-display text-[17px] uppercase transition-all duration-300',
+                compact && compactTitle ? 'translate-y-0 opacity-100' : 'translate-y-1 opacity-0',
+              )}
+            >
+              {compactTitle}
+            </span>
             <div className="flex items-center gap-1.5">
               <nav className="hidden items-center gap-1 sm:flex">
-                <TopLink to="/" icon={<CalendarDays className="h-4 w-4" />} label="Jogos" end />
-                <TopLink to="/classificacao" icon={<Trophy className="h-4 w-4" />} label="Classificação" />
+                <TopLink to="/" icon={<CalendarDays className="h-4 w-4" />} label="Jogos" end compact={compact} />
+                <TopLink to="/classificacao" icon={<Trophy className="h-4 w-4" />} label="Classificação" compact={compact} />
               </nav>
               {onHome && mine && (
                 <button
@@ -98,14 +119,14 @@ export default function PublicLayout() {
                   title={profile.onlyMine ? 'Mostrando só os jogos da sua atlética' : 'Mostrar só os jogos da sua atlética'}
                   className="flex items-center gap-1.5 rounded-full py-1 pl-2 pr-1 text-[12px] font-semibold text-mute transition hover:text-white"
                 >
-                  <span className={cx('transition-colors', profile.onlyMine && 'text-white')}>Só {mine.name}</span>
+                  <span className={cx('overflow-hidden whitespace-nowrap transition-all duration-300', profile.onlyMine && 'text-white', compact ? 'max-w-0 opacity-0' : 'max-w-[140px] opacity-100')}>Só {mine.name}</span>
                   <span className={cx('relative h-5 w-8 rounded-full transition-colors', profile.onlyMine ? 'bg-coal' : 'bg-white/[0.14]')}>
                     <motion.span className="absolute top-0.5 h-4 w-4 rounded-full bg-snow shadow" animate={{ left: profile.onlyMine ? 14 : 2 }} transition={{ type: 'spring', stiffness: 600, damping: 34 }} />
                   </span>
                 </button>
               )}
-              <button onClick={() => setPrefsOpen(true)} aria-label="Minhas preferências" title="Minhas preferências" className="flex h-9 w-9 items-center justify-center rounded-full ring-1 ring-white/[0.1] transition hover:ring-white/30">
-                {mine ? <TeamFlag inst={mine} size={30} /> : <UserRound className="h-4 w-4 text-mute" />}
+              <button onClick={() => setPrefsOpen(true)} aria-label="Minhas preferências" title="Minhas preferências" className={cx('flex items-center justify-center rounded-full ring-1 ring-white/[0.1] transition-all duration-300 hover:ring-white/30', compact ? 'h-7 w-7' : 'h-9 w-9')}>
+                {mine ? <TeamFlag inst={mine} size={compact ? 24 : 30} /> : <UserRound className="h-4 w-4 text-mute" />}
               </button>
             </div>
           </div>
@@ -144,11 +165,11 @@ export default function PublicLayout() {
   );
 }
 
-function TopLink({ to, icon, label, end }: { to: string; icon: JSX.Element; label: string; end?: boolean }) {
+function TopLink({ to, icon, label, end, compact }: { to: string; icon: JSX.Element; label: string; end?: boolean; compact?: boolean }) {
   return (
-    <NavLink to={to} end={end} className={({ isActive }) => cx('inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold transition', isActive ? 'bg-white text-black' : 'text-white/70 hover:text-white')}>
+    <NavLink to={to} end={end} title={label} className={({ isActive }) => cx('inline-flex items-center rounded-full py-1.5 text-[13px] font-semibold transition-all duration-300', compact ? 'gap-0 px-2' : 'gap-1.5 px-3', isActive ? 'bg-white text-black' : 'text-white/70 hover:text-white')}>
       {icon}
-      {label}
+      <span className={cx('overflow-hidden whitespace-nowrap transition-all duration-300', compact ? 'max-w-0 opacity-0' : 'max-w-[120px] opacity-100')}>{label}</span>
     </NavLink>
   );
 }

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Star } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import type { StandingsDTO } from '@shared/types';
 import { MatchCard } from '@/components/match/MatchCard';
@@ -14,7 +14,11 @@ import { usePublic } from './PublicLayout';
 
 export default function InstitutionPage() {
   const { slug = '' } = useParams();
-  const { boot, tournament } = usePublic();
+  const { boot, tournament , setCompactTitle } = usePublic();
+  useEffect(() => {
+    setCompactTitle(null);
+    return () => setCompactTitle(null);
+  }, [setCompactTitle]);
   const inst = boot.institutions.find((i) => i.slug === slug);
   const feed = useFeed(tournament?.id);
   const { profile, save } = useProfile();

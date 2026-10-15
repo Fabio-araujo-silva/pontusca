@@ -1,6 +1,32 @@
 import { useEffect, useState } from 'react';
 import { serverNow } from './socket';
 
+/**
+ * true depois que a página desceu um pouco. Histerese (entra em `down`, sai
+ * em `up`) pra barra não piscar quando o scroll para bem no limite.
+ */
+export function useScrolled(down = 56, up = 16) {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    let raf = 0;
+    const check = () => {
+      raf = 0;
+      const y = window.scrollY;
+      setOn((cur) => (cur ? y > up : y > down));
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(check);
+    };
+    check();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [down, up]);
+  return on;
+}
+
 /** Relógio que bate a cada `ms` (no tempo do servidor). */
 export function useNow(ms = 1000, enabled = true) {
   const [now, setNow] = useState(serverNow);
