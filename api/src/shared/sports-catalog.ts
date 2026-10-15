@@ -1,0 +1,718 @@
+// Catálogo padrão de modalidades. O seed grava isso no banco e o admin
+// pode editar/criar outras pelo painel. Cada entrada define o motor de
+// placar e os botões que o mesário vê no console.
+import type { Gender, PeriodConfig, SportAction, SportConfig } from './types';
+
+export interface CatalogSport {
+  slug: string;
+  name: string;
+  icon: string;
+  category: 'team' | 'individual' | 'race';
+  genders: Gender[];
+  config: SportConfig;
+}
+
+// --- blocos reutilizáveis ----------------------------------------------------
+
+const yellow: SportAction = { key: 'yellow', label: 'Amarelo', kind: 'card', color: 'yellow', athlete: 'optional', short: 'Cartão amarelo' };
+const red: SportAction = { key: 'red', label: 'Vermelho', kind: 'card', color: 'red', athlete: 'optional', short: 'Cartão vermelho' };
+const sub: SportAction = { key: 'sub', label: 'Substituição', kind: 'sub', athlete: 'optional' };
+const foul: SportAction = { key: 'foul', label: 'Falta', kind: 'foul', athlete: 'optional' };
+const timeout: SportAction = { key: 'timeout', label: 'Tempo', kind: 'timeout', athlete: 'none', short: 'Pedido de tempo' };
+const goal = (celebrate = 'GOL!'): SportAction => ({ key: 'goal', label: 'Gol', kind: 'score', value: 1, athlete: 'optional', celebrate });
+const ownGoal: SportAction = { key: 'own_goal', label: 'Gol contra', kind: 'score', value: 1, against: true, athlete: 'optional', celebrate: 'GOL!' };
+
+const periods = (p: Partial<PeriodConfig> & Pick<PeriodConfig, 'count' | 'durationMin'>): PeriodConfig => ({
+  label: 'Tempo',
+  short: 'T',
+  clock: p.durationMin ? 'up' : 'none',
+  display: 'minute',
+  breakLabel: 'Intervalo',
+  ...p,
+});
+
+const quarters = (min: number): PeriodConfig =>
+  periods({ count: 4, durationMin: min, label: 'Quarto', short: 'Q', clock: 'down', display: 'mmss' });
+
+const rounds = (count: number, min: number): PeriodConfig =>
+  periods({ count, durationMin: min, label: 'Round', short: 'R', clock: 'down', display: 'mmss', breakLabel: 'Descanso' });
+
+const setsCfg = (bestOf: number, target: number | null, decidingTarget: number | null, extra: Partial<NonNullable<SportConfig['sets']>> = {}) => ({
+  bestOf,
+  target,
+  decidingTarget,
+  winBy: 2,
+  cap: null,
+  label: 'Set',
+  ...extra,
+});
+
+const MF: Gender[] = ['M', 'F'];
+const MFX: Gender[] = ['M', 'F', 'X'];
+const X: Gender[] = ['X'];
+
+// --- catálogo -------------------------------------------------------------------
+
+export const SPORTS_CATALOG: CatalogSport[] = [
+  // ===== bola no pé =====
+  {
+    slug: 'futebol',
+    name: 'Futebol de Campo',
+    icon: 'soccer',
+    category: 'team',
+    genders: MF,
+    config: {
+      engine: 'SCORE',
+      allowDraw: true,
+      scoreLabel: 'Gols',
+      periods: periods({ count: 2, durationMin: 45 }),
+      overtime: { count: 2, durationMin: 15, label: 'Prorrogação', short: 'PR' },
+      shootout: { label: 'Pênaltis', kicks: 5 },
+      actions: [
+        goal(),
+        { key: 'penalty_goal', label: 'Gol de pênalti', kind: 'score', value: 1, athlete: 'optional', celebrate: 'GOL!' },
+        ownGoal,
+        yellow,
+        red,
+        sub,
+        foul,
+        { key: 'corner', label: 'Escanteio', kind: 'stat', athlete: 'none' },
+        { key: 'shot', label: 'Finalização', kind: 'stat', athlete: 'none' },
+        { key: 'penalty_miss', label: 'Pênalti perdido', kind: 'stat', athlete: 'optional' },
+      ],
+      lineup: { starters: 11, positions: ['GOL', 'ZAG', 'LAT', 'VOL', 'MEI', 'ATA'] },
+    },
+  },
+  {
+    slug: 'futsal',
+    name: 'Futsal',
+    icon: 'futsal',
+    category: 'team',
+    genders: MF,
+    config: {
+      engine: 'SCORE',
+      allowDraw: true,
+      scoreLabel: 'Gols',
+      periods: periods({ count: 2, durationMin: 20, clock: 'down', display: 'mmss' }),
+      overtime: { count: 2, durationMin: 5, label: 'Prorrogação', short: 'PR' },
+      shootout: { label: 'Pênaltis', kicks: 3 },
+      actions: [goal(), ownGoal, yellow, red, sub, foul, timeout],
+      lineup: { starters: 5, positions: ['GOL', 'FIXO', 'ALA', 'PIVÔ'] },
+    },
+  },
+  {
+    slug: 'society',
+    name: 'Futebol Society',
+    icon: 'soccer',
+    category: 'team',
+    genders: MF,
+    config: {
+      engine: 'SCORE',
+      allowDraw: true,
+      scoreLabel: 'Gols',
+      periods: periods({ count: 2, durationMin: 25 }),
+      overtime: null,
+      shootout: { label: 'Pênaltis', kicks: 3 },
+      actions: [goal(), ownGoal, yellow, red, sub, foul],
+      lineup: { starters: 7 },
+    },
+  },
+  {
+    slug: 'futevolei',
+    name: 'Futevôlei',
+    icon: 'volleyball',
+    category: 'team',
+    genders: MFX,
+    config: {
+      engine: 'SETS',
+      allowDraw: false,
+      scoreLabel: 'Sets',
+      sets: setsCfg(3, 18, 15),
+      actions: [timeout],
+      lineup: { starters: 2 },
+    },
+  },
+
+  // ===== quadra =====
+  {
+    slug: 'basquete',
+    name: 'Basquete',
+    icon: 'basketball',
+    category: 'team',
+    genders: MF,
+    config: {
+      engine: 'SCORE',
+      allowDraw: false,
+      scoreLabel: 'Pontos',
+      periods: quarters(10),
+      overtime: { count: 1, durationMin: 5, label: 'Prorrogação', short: 'OT' },
+      shootout: null,
+      actions: [
+        { key: 'ft', label: '+1', kind: 'score', value: 1, athlete: 'optional', short: 'Lance livre' },
+        { key: 'two', label: '+2', kind: 'score', value: 2, athlete: 'optional', short: 'Cesta de 2' },
+        { key: 'three', label: '+3', kind: 'score', value: 3, athlete: 'optional', short: 'Cesta de 3', celebrate: 'DE TRÊS!' },
+        foul,
+        timeout,
+        sub,
+      ],
+      lineup: { starters: 5, positions: ['ARM', 'ALA', 'PIV'] },
+    },
+  },
+  {
+    slug: 'basquete-3x3',
+    name: 'Basquete 3x3',
+    icon: 'basketball',
+    category: 'team',
+    genders: MFX,
+    config: {
+      engine: 'SCORE',
+      allowDraw: false,
+      scoreLabel: 'Pontos',
+      periods: periods({ count: 1, durationMin: 10, label: 'Tempo', short: 'T', clock: 'down', display: 'mmss' }),
+      overtime: { count: 1, durationMin: null, label: 'Prorrogação', short: 'OT' },
+      shootout: null,
+      actions: [
+        { key: 'one', label: '+1', kind: 'score', value: 1, athlete: 'optional', short: 'Cesta de 1' },
+        { key: 'two', label: '+2', kind: 'score', value: 2, athlete: 'optional', short: 'Cesta de 2', celebrate: 'DE FORA!' },
+        foul,
+        timeout,
+        sub,
+      ],
+      lineup: { starters: 3 },
+    },
+  },
+  {
+    slug: 'handebol',
+    name: 'Handebol',
+    icon: 'handball',
+    category: 'team',
+    genders: MF,
+    config: {
+      engine: 'SCORE',
+      allowDraw: true,
+      scoreLabel: 'Gols',
+      periods: periods({ count: 2, durationMin: 30, display: 'mmss' }),
+      overtime: { count: 2, durationMin: 5, label: 'Prorrogação', short: 'PR' },
+      shootout: { label: 'Tiros de 7m', kicks: 5 },
+      actions: [
+        goal(),
+        { key: 'seven', label: 'Gol de 7m', kind: 'score', value: 1, athlete: 'optional', celebrate: 'GOL!' },
+        { key: 'two_min', label: '2 minutos', kind: 'card', color: 'white', athlete: 'optional', short: 'Exclusão de 2 min' },
+        yellow,
+        red,
+        timeout,
+        sub,
+      ],
+      lineup: { starters: 7, positions: ['GOL', 'PON', 'ARM', 'CEN', 'PIV'] },
+    },
+  },
+  {
+    slug: 'volei',
+    name: 'Vôlei',
+    icon: 'volleyball',
+    category: 'team',
+    genders: MFX,
+    config: {
+      engine: 'SETS',
+      allowDraw: false,
+      scoreLabel: 'Sets',
+      sets: setsCfg(3, 25, 15),
+      actions: [
+        { key: 'ace', label: 'Ace', kind: 'stat', athlete: 'optional' },
+        { key: 'block', label: 'Bloqueio', kind: 'stat', athlete: 'optional' },
+        timeout,
+        sub,
+        yellow,
+        red,
+      ],
+      lineup: { starters: 6, positions: ['LEV', 'OPO', 'PON', 'CEN', 'LÍB'] },
+    },
+  },
+  {
+    slug: 'volei-praia',
+    name: 'Vôlei de Praia',
+    icon: 'beach-volleyball',
+    category: 'team',
+    genders: MFX,
+    config: { engine: 'SETS', allowDraw: false, scoreLabel: 'Sets', sets: setsCfg(3, 21, 15), actions: [timeout], lineup: { starters: 2 } },
+  },
+  {
+    slug: 'queimada',
+    name: 'Queimada',
+    icon: 'dodgeball',
+    category: 'team',
+    genders: MFX,
+    config: {
+      engine: 'SETS',
+      allowDraw: false,
+      scoreLabel: 'Sets',
+      sets: setsCfg(3, null, null, { label: 'Set' }),
+      actions: [timeout],
+      lineup: { starters: 10 },
+    },
+  },
+  {
+    slug: 'hoquei',
+    name: 'Hóquei',
+    icon: 'hockey',
+    category: 'team',
+    genders: MF,
+    config: {
+      engine: 'SCORE',
+      allowDraw: true,
+      scoreLabel: 'Gols',
+      periods: periods({ count: 4, durationMin: 15, label: 'Período', short: 'P' }),
+      overtime: null,
+      shootout: { label: 'Shoot-out', kicks: 5 },
+      actions: [goal(), { key: 'green', label: 'Verde', kind: 'card', color: 'green', athlete: 'optional', short: 'Cartão verde' }, yellow, red, sub],
+      lineup: { starters: 11 },
+    },
+  },
+
+  // ===== campo / oval =====
+  {
+    slug: 'rugby',
+    name: 'Rugby Sevens',
+    icon: 'rugby',
+    category: 'team',
+    genders: MF,
+    config: {
+      engine: 'SCORE',
+      allowDraw: true,
+      scoreLabel: 'Pontos',
+      periods: periods({ count: 2, durationMin: 7, display: 'mmss' }),
+      overtime: { count: 1, durationMin: 5, label: 'Prorrogação', short: 'PR' },
+      shootout: null,
+      actions: [
+        { key: 'try', label: 'Try +5', kind: 'score', value: 5, athlete: 'optional', short: 'Try', celebrate: 'TRY!' },
+        { key: 'conversion', label: 'Conversão +2', kind: 'score', value: 2, athlete: 'optional', short: 'Conversão' },
+        { key: 'penalty', label: 'Penal +3', kind: 'score', value: 3, athlete: 'optional', short: 'Penal' },
+        { key: 'drop', label: 'Drop +3', kind: 'score', value: 3, athlete: 'optional', short: 'Drop goal' },
+        yellow,
+        red,
+        sub,
+      ],
+      lineup: { starters: 7 },
+    },
+  },
+  {
+    slug: 'futebol-americano',
+    name: 'Futebol Americano',
+    icon: 'american-football',
+    category: 'team',
+    genders: MF,
+    config: {
+      engine: 'SCORE',
+      allowDraw: false,
+      scoreLabel: 'Pontos',
+      periods: quarters(12),
+      overtime: { count: 1, durationMin: 10, label: 'Overtime', short: 'OT' },
+      shootout: null,
+      actions: [
+        { key: 'td', label: 'TD +6', kind: 'score', value: 6, athlete: 'optional', short: 'Touchdown', celebrate: 'TOUCHDOWN!' },
+        { key: 'xp', label: 'XP +1', kind: 'score', value: 1, athlete: 'optional', short: 'Extra point' },
+        { key: 'two_pt', label: '2PT +2', kind: 'score', value: 2, athlete: 'optional', short: 'Conversão de 2' },
+        { key: 'fg', label: 'FG +3', kind: 'score', value: 3, athlete: 'optional', short: 'Field goal', celebrate: 'FIELD GOAL!' },
+        { key: 'safety', label: 'Safety +2', kind: 'score', value: 2, athlete: 'none', short: 'Safety' },
+        { key: 'flag', label: 'Falta (flag)', kind: 'foul', athlete: 'none', short: 'Penalidade' },
+        timeout,
+      ],
+      lineup: { starters: 11, positions: ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S', 'K'] },
+    },
+  },
+  {
+    slug: 'flag-football',
+    name: 'Flag Football',
+    icon: 'american-football',
+    category: 'team',
+    genders: MFX,
+    config: {
+      engine: 'SCORE',
+      allowDraw: true,
+      scoreLabel: 'Pontos',
+      periods: periods({ count: 2, durationMin: 20, display: 'mmss' }),
+      overtime: { count: 1, durationMin: null, label: 'Overtime', short: 'OT' },
+      shootout: null,
+      actions: [
+        { key: 'td', label: 'TD +6', kind: 'score', value: 6, athlete: 'optional', short: 'Touchdown', celebrate: 'TOUCHDOWN!' },
+        { key: 'xp1', label: 'Extra +1', kind: 'score', value: 1, athlete: 'optional', short: 'Extra point' },
+        { key: 'xp2', label: 'Extra +2', kind: 'score', value: 2, athlete: 'optional', short: 'Extra point de 2' },
+        { key: 'safety', label: 'Safety +2', kind: 'score', value: 2, athlete: 'none' },
+        timeout,
+      ],
+      lineup: { starters: 5 },
+    },
+  },
+  {
+    slug: 'ultimate',
+    name: 'Ultimate Frisbee',
+    icon: 'frisbee',
+    category: 'team',
+    genders: X,
+    config: {
+      engine: 'SCORE',
+      allowDraw: false,
+      scoreLabel: 'Pontos',
+      periods: periods({ count: 2, durationMin: null, clock: 'none', label: 'Tempo' }),
+      overtime: null,
+      shootout: null,
+      actions: [{ key: 'point', label: 'Ponto', kind: 'score', value: 1, athlete: 'optional', celebrate: 'PONTO!' }, timeout],
+      lineup: { starters: 7 },
+    },
+  },
+
+  // ===== taco e bola =====
+  {
+    slug: 'beisebol',
+    name: 'Beisebol',
+    icon: 'baseball',
+    category: 'team',
+    genders: ['M'],
+    config: { engine: 'BASEBALL', allowDraw: false, scoreLabel: 'Corridas', baseball: { innings: 9 }, actions: [sub], lineup: { starters: 9, positions: ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'] } },
+  },
+  {
+    slug: 'softbol',
+    name: 'Softbol',
+    icon: 'baseball',
+    category: 'team',
+    genders: ['F', 'X'],
+    config: { engine: 'BASEBALL', allowDraw: false, scoreLabel: 'Corridas', baseball: { innings: 7 }, actions: [sub], lineup: { starters: 9, positions: ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DP'] } },
+  },
+
+  // ===== água =====
+  {
+    slug: 'polo-aquatico',
+    name: 'Polo Aquático',
+    icon: 'water-polo',
+    category: 'team',
+    genders: MF,
+    config: {
+      engine: 'SCORE',
+      allowDraw: true,
+      scoreLabel: 'Gols',
+      periods: periods({ count: 4, durationMin: 8, label: 'Período', short: 'P', clock: 'down', display: 'mmss' }),
+      overtime: null,
+      shootout: { label: 'Pênaltis', kicks: 5 },
+      actions: [goal(), { key: 'exclusion', label: 'Exclusão', kind: 'card', color: 'white', athlete: 'optional', short: 'Exclusão de 20s' }, yellow, red, timeout],
+      lineup: { starters: 7 },
+    },
+  },
+  {
+    slug: 'natacao',
+    name: 'Natação',
+    icon: 'swimming',
+    category: 'race',
+    genders: MFX,
+    config: { engine: 'RANKING', allowDraw: false, ranking: { order: 'asc', format: 'time', unit: 's', resultLabel: 'Tempo' }, actions: [] },
+  },
+
+  // ===== raquete =====
+  {
+    slug: 'tenis',
+    name: 'Tênis',
+    icon: 'tennis',
+    category: 'individual',
+    genders: MFX,
+    config: {
+      engine: 'TENNIS',
+      allowDraw: false,
+      scoreLabel: 'Sets',
+      tennis: { bestOf: 3, gamesPerSet: 6, tiebreakAt: 6, tiebreakTarget: 7, superTiebreak: 10, noAd: false },
+      actions: [],
+      lineup: { starters: 1 },
+    },
+  },
+  {
+    slug: 'beach-tennis',
+    name: 'Beach Tennis',
+    icon: 'tennis',
+    category: 'individual',
+    genders: MFX,
+    config: {
+      engine: 'TENNIS',
+      allowDraw: false,
+      scoreLabel: 'Sets',
+      tennis: { bestOf: 1, gamesPerSet: 6, tiebreakAt: 6, tiebreakTarget: 7, superTiebreak: null, noAd: true },
+      actions: [],
+      lineup: { starters: 2 },
+    },
+  },
+  {
+    slug: 'padel',
+    name: 'Padel',
+    icon: 'tennis',
+    category: 'individual',
+    genders: MFX,
+    config: {
+      engine: 'TENNIS',
+      allowDraw: false,
+      scoreLabel: 'Sets',
+      tennis: { bestOf: 3, gamesPerSet: 6, tiebreakAt: 6, tiebreakTarget: 7, superTiebreak: null, noAd: true },
+      actions: [],
+      lineup: { starters: 2 },
+    },
+  },
+  {
+    slug: 'tenis-de-mesa',
+    name: 'Tênis de Mesa',
+    icon: 'table-tennis',
+    category: 'individual',
+    genders: MFX,
+    config: { engine: 'SETS', allowDraw: false, scoreLabel: 'Sets', sets: setsCfg(5, 11, 11), actions: [timeout], lineup: { starters: 1 } },
+  },
+  {
+    slug: 'badminton',
+    name: 'Badminton',
+    icon: 'badminton',
+    category: 'individual',
+    genders: MFX,
+    config: { engine: 'SETS', allowDraw: false, scoreLabel: 'Games', sets: setsCfg(3, 21, 21, { cap: 30, label: 'Game' }), actions: [], lineup: { starters: 1 } },
+  },
+  {
+    slug: 'squash',
+    name: 'Squash',
+    icon: 'tennis',
+    category: 'individual',
+    genders: MF,
+    config: { engine: 'SETS', allowDraw: false, scoreLabel: 'Games', sets: setsCfg(5, 11, 11, { label: 'Game' }), actions: [], lineup: { starters: 1 } },
+  },
+  {
+    slug: 'peteca',
+    name: 'Peteca',
+    icon: 'badminton',
+    category: 'individual',
+    genders: MFX,
+    config: { engine: 'SETS', allowDraw: false, scoreLabel: 'Sets', sets: setsCfg(3, 12, 12), actions: [], lineup: { starters: 1 } },
+  },
+
+  // ===== lutas =====
+  {
+    slug: 'judo',
+    name: 'Judô',
+    icon: 'combat',
+    category: 'individual',
+    genders: MF,
+    config: {
+      engine: 'SCORE',
+      allowDraw: false,
+      scoreLabel: 'Pontos',
+      periods: periods({ count: 1, durationMin: 4, label: 'Luta', short: 'L', clock: 'down', display: 'mmss' }),
+      overtime: { count: 1, durationMin: null, label: 'Golden score', short: 'GS' },
+      shootout: null,
+      actions: [
+        { key: 'ippon', label: 'Ippon', kind: 'score', value: 10, athlete: 'none', celebrate: 'IPPON!', decisive: true },
+        { key: 'wazaari', label: 'Waza-ari', kind: 'score', value: 1, athlete: 'none', celebrate: 'WAZA-ARI!' },
+        { key: 'shido', label: 'Shido', kind: 'card', color: 'yellow', athlete: 'none', short: 'Shido' },
+        { key: 'hansoku', label: 'Hansoku-make', kind: 'card', color: 'red', athlete: 'none', short: 'Hansoku-make' },
+      ],
+      lineup: { starters: 1 },
+    },
+  },
+  {
+    slug: 'karate',
+    name: 'Karatê',
+    icon: 'combat',
+    category: 'individual',
+    genders: MF,
+    config: {
+      engine: 'SCORE',
+      allowDraw: true,
+      scoreLabel: 'Pontos',
+      periods: periods({ count: 1, durationMin: 3, label: 'Luta', short: 'L', clock: 'down', display: 'mmss' }),
+      overtime: null,
+      shootout: null,
+      actions: [
+        { key: 'yuko', label: 'Yuko +1', kind: 'score', value: 1, athlete: 'none', short: 'Yuko' },
+        { key: 'wazaari', label: 'Waza-ari +2', kind: 'score', value: 2, athlete: 'none', short: 'Waza-ari' },
+        { key: 'ippon', label: 'Ippon +3', kind: 'score', value: 3, athlete: 'none', short: 'Ippon', celebrate: 'IPPON!' },
+        { key: 'penalty', label: 'Penalidade', kind: 'card', color: 'yellow', athlete: 'none' },
+      ],
+      lineup: { starters: 1 },
+    },
+  },
+  {
+    slug: 'taekwondo',
+    name: 'Taekwondo',
+    icon: 'combat',
+    category: 'individual',
+    genders: MF,
+    config: {
+      engine: 'SCORE',
+      allowDraw: false,
+      scoreLabel: 'Pontos',
+      periods: rounds(3, 2),
+      overtime: { count: 1, durationMin: 1, label: 'Golden round', short: 'GR' },
+      shootout: null,
+      actions: [
+        { key: 'punch', label: 'Soco +1', kind: 'score', value: 1, athlete: 'none', short: 'Soco' },
+        { key: 'body', label: 'Tronco +2', kind: 'score', value: 2, athlete: 'none', short: 'Chute no tronco' },
+        { key: 'head', label: 'Cabeça +3', kind: 'score', value: 3, athlete: 'none', short: 'Chute na cabeça', celebrate: 'NA CABEÇA!' },
+        { key: 'spin_body', label: 'Giro tronco +4', kind: 'score', value: 4, athlete: 'none', short: 'Giratório no tronco' },
+        { key: 'spin_head', label: 'Giro cabeça +5', kind: 'score', value: 5, athlete: 'none', short: 'Giratório na cabeça', celebrate: 'GIRATÓRIO!' },
+        { key: 'gamjeom', label: 'Gam-jeom', kind: 'score', value: 1, against: true, athlete: 'none', short: 'Gam-jeom (ponto ao rival)' },
+      ],
+      lineup: { starters: 1 },
+    },
+  },
+  {
+    slug: 'jiu-jitsu',
+    name: 'Jiu-Jitsu',
+    icon: 'combat',
+    category: 'individual',
+    genders: MF,
+    config: {
+      engine: 'SCORE',
+      allowDraw: false,
+      scoreLabel: 'Pontos',
+      periods: periods({ count: 1, durationMin: 5, label: 'Luta', short: 'L', clock: 'down', display: 'mmss' }),
+      overtime: null,
+      shootout: null,
+      actions: [
+        { key: 'takedown', label: 'Queda +2', kind: 'score', value: 2, athlete: 'none', short: 'Queda' },
+        { key: 'sweep', label: 'Raspagem +2', kind: 'score', value: 2, athlete: 'none', short: 'Raspagem' },
+        { key: 'knee', label: 'Joelho +2', kind: 'score', value: 2, athlete: 'none', short: 'Joelho na barriga' },
+        { key: 'pass', label: 'Passagem +3', kind: 'score', value: 3, athlete: 'none', short: 'Passagem de guarda' },
+        { key: 'mount', label: 'Montada +4', kind: 'score', value: 4, athlete: 'none', short: 'Montada' },
+        { key: 'back', label: 'Costas +4', kind: 'score', value: 4, athlete: 'none', short: 'Pegada nas costas' },
+        { key: 'advantage', label: 'Vantagem', kind: 'stat', athlete: 'none' },
+        { key: 'penalty', label: 'Punição', kind: 'card', color: 'yellow', athlete: 'none' },
+        { key: 'submission', label: 'Finalização', kind: 'score', value: 0, athlete: 'none', celebrate: 'FINALIZOU!', decisive: true },
+      ],
+      lineup: { starters: 1 },
+    },
+  },
+  {
+    slug: 'boxe',
+    name: 'Boxe',
+    icon: 'boxing',
+    category: 'individual',
+    genders: MF,
+    config: {
+      engine: 'SCORE',
+      allowDraw: true,
+      scoreLabel: 'Pontos',
+      periods: rounds(3, 3),
+      overtime: null,
+      shootout: null,
+      actions: [
+        { key: 'knockdown', label: 'Knockdown', kind: 'stat', athlete: 'none', short: 'Knockdown' },
+        { key: 'ko', label: 'Nocaute', kind: 'score', value: 0, athlete: 'none', celebrate: 'NOCAUTE!', decisive: true },
+        { key: 'warning', label: 'Advertência', kind: 'card', color: 'yellow', athlete: 'none' },
+      ],
+      lineup: { starters: 1 },
+    },
+  },
+
+  // ===== mente / e-sports =====
+  {
+    slug: 'xadrez',
+    name: 'Xadrez',
+    icon: 'chess',
+    category: 'individual',
+    genders: X,
+    config: {
+      engine: 'SCORE',
+      allowDraw: true,
+      scoreLabel: 'Pontos',
+      periods: periods({ count: 1, durationMin: null, clock: 'none', label: 'Rodada', short: 'R' }),
+      overtime: null,
+      shootout: null,
+      actions: [
+        { key: 'board_win', label: 'Vitória (1)', kind: 'score', value: 1, athlete: 'optional', short: 'Vitória no tabuleiro', celebrate: 'XEQUE-MATE!' },
+        { key: 'board_draw', label: 'Empate (½)', kind: 'score', value: 0.5, both: true, athlete: 'none', short: 'Empate no tabuleiro' },
+      ],
+      lineup: { starters: 4 },
+    },
+  },
+  {
+    slug: 'lol',
+    name: 'League of Legends',
+    icon: 'esports',
+    category: 'team',
+    genders: X,
+    config: { engine: 'SETS', allowDraw: false, scoreLabel: 'Partidas', sets: setsCfg(3, null, null, { label: 'Partida' }), actions: [], lineup: { starters: 5, positions: ['TOP', 'JG', 'MID', 'ADC', 'SUP'] } },
+  },
+  {
+    slug: 'cs2',
+    name: 'Counter-Strike 2',
+    icon: 'esports',
+    category: 'team',
+    genders: X,
+    config: { engine: 'SETS', allowDraw: false, scoreLabel: 'Mapas', sets: setsCfg(3, 13, 13, { label: 'Mapa' }), actions: [timeout], lineup: { starters: 5 } },
+  },
+  {
+    slug: 'valorant',
+    name: 'Valorant',
+    icon: 'esports',
+    category: 'team',
+    genders: X,
+    config: { engine: 'SETS', allowDraw: false, scoreLabel: 'Mapas', sets: setsCfg(3, 13, 13, { label: 'Mapa' }), actions: [timeout], lineup: { starters: 5 } },
+  },
+  {
+    slug: 'ea-fc',
+    name: 'EA Sports FC',
+    icon: 'esports',
+    category: 'individual',
+    genders: X,
+    config: {
+      engine: 'SCORE',
+      allowDraw: true,
+      scoreLabel: 'Gols',
+      periods: periods({ count: 2, durationMin: null, clock: 'none' }),
+      overtime: { count: 1, durationMin: null, label: 'Prorrogação', short: 'PR' },
+      shootout: { label: 'Pênaltis', kicks: 5 },
+      actions: [goal(), yellow, red],
+      lineup: { starters: 1 },
+    },
+  },
+
+  // ===== provas (ranking) =====
+  {
+    slug: 'atletismo-pista',
+    name: 'Atletismo · Pista',
+    icon: 'athletics',
+    category: 'race',
+    genders: MFX,
+    config: { engine: 'RANKING', allowDraw: false, ranking: { order: 'asc', format: 'time', unit: 's', resultLabel: 'Tempo' }, actions: [] },
+  },
+  {
+    slug: 'atletismo-campo',
+    name: 'Atletismo · Campo',
+    icon: 'athletics',
+    category: 'race',
+    genders: MF,
+    config: { engine: 'RANKING', allowDraw: false, ranking: { order: 'desc', format: 'decimal', unit: 'm', resultLabel: 'Marca' }, actions: [] },
+  },
+  {
+    slug: 'corrida-rua',
+    name: 'Corrida de Rua',
+    icon: 'athletics',
+    category: 'race',
+    genders: MFX,
+    config: { engine: 'RANKING', allowDraw: false, ranking: { order: 'asc', format: 'time', unit: 's', resultLabel: 'Tempo' }, actions: [] },
+  },
+  {
+    slug: 'cheerleading',
+    name: 'Cheerleading',
+    icon: 'cheer',
+    category: 'race',
+    genders: X,
+    config: { engine: 'RANKING', allowDraw: false, ranking: { order: 'desc', format: 'decimal', unit: 'pts', resultLabel: 'Nota' }, actions: [] },
+  },
+  {
+    slug: 'ginastica',
+    name: 'Ginástica',
+    icon: 'cheer',
+    category: 'race',
+    genders: MF,
+    config: { engine: 'RANKING', allowDraw: false, ranking: { order: 'desc', format: 'decimal', unit: 'pts', resultLabel: 'Nota' }, actions: [] },
+  },
+  {
+    slug: 'tiro-com-arco',
+    name: 'Tiro com Arco',
+    icon: 'archery',
+    category: 'race',
+    genders: MFX,
+    config: { engine: 'RANKING', allowDraw: false, ranking: { order: 'desc', format: 'integer', unit: 'pts', resultLabel: 'Pontos' }, actions: [] },
+  },
+];

@@ -1,0 +1,270 @@
+// Banco da Arquibancada. SQLite (WAL) aguenta folgado um torneio universitário
+// numa instância só; pra trocar por Postgres basta mudar o provider — não há
+// enums nem Json nativo de propósito (status/roles são String, configs são
+// JSON serializado em String).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String      @id @default(cuid())
+  name         String
+  email        String      @unique
+  passwordHash String
+  role         String // ADMIN | MESARIO
+  phone        String?
+  active       Boolean     @default(true)
+  sports       UserSport[]
+  primaryOf    Match[]     @relation("primaryMesario")
+  backupOf     Match[]     @relation("backupMesario")
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model UserSport {
+  userId  String
+  sportId String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sport   Sport  @relation(fields: [sportId], references: [id], onDelete: Cascade)
+
+  @@id([userId, sportId])
+}
+
+model Institution {
+  id             String             @id @default(cuid())
+  name           String // nome curto: "CAASO"
+  fullName       String?
+  university     String? // "USP São Carlos"
+  city           String?
+  slug           String             @unique
+  primaryColor   String             @default("#1f2937")
+  secondaryColor String             @default("#ffffff")
+  accentColor    String?
+  flagPattern    String             @default("stripes")
+  logo           String? // URL ou data URL (até ~300KB)
+  isSandbox      Boolean            @default(false)
+  athletes       Athlete[]
+  homeMatches    Match[]            @relation("home")
+  awayMatches    Match[]            @relation("away")
+  participations MatchParticipant[]
+  placements     Placement[]
+  adjustments    PointAdjustment[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+}
+
+model Sport {
+  id        String        @id @default(cuid())
+  name      String
+  slug      String        @unique
+  icon      String        @default("generic")
+  category  String        @default("team") // team | individual | race
+  engine    String // SCORE | SETS | TENNIS | BASEBALL | RANKING
+  config    String // JSON SportConfig
+  genders   String        @default("M,F")
+  active    Boolean       @default(true)
+  order     Int           @default(0)
+  matches   Match[]
+  rosters   RosterEntry[]
+  mesarios  UserSport[]
+  rules     ScoringRule[]
+  placements Placement[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model Tournament {
+  id          String            @id @default(cuid())
+  name        String
+  slug        String            @unique
+  edition     String?
+  city        String?
+  startsAt    DateTime?
+  endsAt      DateTime?
+  active      Boolean           @default(true)
+  isSandbox   Boolean           @default(false)
+  tiebreakers String            @default("[\"POINTS\",\"GOLD\",\"SILVER\",\"BRONZE\",\"WINS\",\"SCORE_DIFF\"]")
+  color       String?
+  matches     Match[]
+  rules       ScoringRule[]
+  placements  Placement[]
+  adjustments PointAdjustment[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model Athlete {
+  id            String         @id @default(cuid())
+  institutionId String
+  institution   Institution    @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  name          String
+  nickname      String?
+  course        String?
+  isSandbox     Boolean        @default(false)
+  rosters       RosterEntry[]
+  matchPlayers  MatchPlayer[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([institutionId])
+}
+
+// Elenco fixo da atlética numa modalidade (importado pra cada jogo)
+model RosterEntry {
+  id        String  @id @default(cuid())
+  athleteId String
+  sportId   String
+  gender    String
+  number    Int?
+  position  String?
+  athlete   Athlete @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  sport     Sport   @relation(fields: [sportId], references: [id], onDelete: Cascade)
+
+  @@unique([athleteId, sportId, gender])
+  @@index([sportId, gender])
+}
+
+model Match {
+  id                 String             @id @default(cuid())
+  tournamentId       String
+  sportId            String
+  gender             String             @default("M")
+  phase              String? // "Fase de grupos", "Semifinal", "Final"
+  group              String? // "A"
+  title              String? // provas de ranking: "100m rasos"
+  venue              String?
+  scheduledAt        DateTime
+  status             String             @default("SCHEDULED")
+  homeId             String?
+  awayId             String?
+  mesarioId          String?
+  backupMesarioId    String?
+  backupEnabled      Boolean            @default(false)
+  countsForStandings Boolean            @default(true)
+  summary            String             @default("{}") // JSON do placar calculado (cache p/ feed)
+  seq                Int                @default(0)
+  manualResult       String? // JSON {home, away, winner, note} lançado pelo admin
+  notes              String?
+  isSandbox          Boolean            @default(false)
+  startedAt          DateTime?
+  finishedAt         DateTime?
+  tournament         Tournament         @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  sport              Sport              @relation(fields: [sportId], references: [id])
+  home               Institution?       @relation("home", fields: [homeId], references: [id])
+  away               Institution?       @relation("away", fields: [awayId], references: [id])
+  mesario            User?              @relation("primaryMesario", fields: [mesarioId], references: [id], onDelete: SetNull)
+  backupMesario      User?              @relation("backupMesario", fields: [backupMesarioId], references: [id], onDelete: SetNull)
+  events             MatchEvent[]
+  players            MatchPlayer[]
+  participants       MatchParticipant[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([tournamentId, scheduledAt])
+  @@index([status])
+  @@index([mesarioId])
+  @@index([backupMesarioId])
+}
+
+model MatchEvent {
+  id          String    @id @default(cuid())
+  matchId     String
+  seq         Int
+  clientId    String?
+  type        String
+  side        String?
+  athleteId   String?
+  athlete2Id  String?
+  payload     String    @default("{}")
+  period      Int?
+  clockMs     Int?
+  createdById String?
+  voided      Boolean   @default(false)
+  voidedById  String?
+  voidedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  match       Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, clientId])
+  @@index([matchId, seq])
+}
+
+model MatchPlayer {
+  id        String  @id @default(cuid())
+  matchId   String
+  athleteId String
+  side      String
+  number    Int?
+  position  String?
+  starter   Boolean @default(false)
+  captain   Boolean @default(false)
+  match     Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  athlete   Athlete @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, athleteId])
+}
+
+model MatchParticipant {
+  id            String      @id @default(cuid())
+  matchId       String
+  institutionId String
+  athleteName   String?
+  lane          Int?
+  match         Match       @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+}
+
+// Quanto vale cada resultado no placar geral do torneio
+model ScoringRule {
+  id              String     @id @default(cuid())
+  tournamentId    String
+  sportId         String? // null = regra padrão do torneio
+  gender          String? // null = vale pra todos os naipes
+  win             Float      @default(3)
+  draw            Float      @default(1)
+  loss            Float      @default(0)
+  woWin           Float      @default(3)
+  woLoss          Float      @default(0)
+  participation   Float      @default(0)
+  placementPoints String     @default("[]") // [13,10,8,...] por colocação final na modalidade
+  racePoints      String     @default("[]") // pontos por colocação em cada prova (ranking)
+  tiebreakers     String     @default("[\"POINTS\",\"WINS\",\"SCORE_DIFF\",\"SCORE_FOR\",\"HEAD_TO_HEAD\"]")
+  tournament      Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  sport           Sport?     @relation(fields: [sportId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId])
+}
+
+// Classificação final de uma atlética numa modalidade (dá placementPoints)
+model Placement {
+  id            String      @id @default(cuid())
+  tournamentId  String
+  sportId       String
+  gender        String
+  institutionId String
+  position      Int
+  tournament    Tournament  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  sport         Sport       @relation(fields: [sportId], references: [id], onDelete: Cascade)
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, sportId, gender, institutionId])
+}
+
+// Ajuste manual de pontos (bônus, punição, correção)
+model PointAdjustment {
+  id            String      @id @default(cuid())
+  tournamentId  String
+  institutionId String
+  points        Float
+  reason        String
+  createdById   String?
+  tournament    Tournament  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+}

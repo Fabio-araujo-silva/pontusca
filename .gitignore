@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.tsbuildinfo
+# bancos locais (dev e sandbox)
+api/*.db
+api/*.db-journal
+api/*.db-wal
+api/*.db-shm
+api/prisma/*.db*
+.env
+.env.*
+!.env.example

@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
+  }
+  html,
+  body {
+    @apply bg-ink text-white antialiased;
+    font-feature-settings: 'cv11', 'ss01', 'tnum';
+    overscroll-behavior-y: none;
+  }
+  body {
+    min-height: 100dvh;
+  }
+  ::selection {
+    @apply bg-brand text-brand-ink;
+  }
+  input,
+  select,
+  textarea {
+    @apply outline-none;
+  }
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+  }
+}
+
+@layer components {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .scroll-x {
+    @apply flex overflow-x-auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .scroll-x::-webkit-scrollbar {
+    display: none;
+  }
+  .card {
+    @apply rounded-[22px] bg-ink-850 shadow-card ring-1 ring-white/[0.06];
+  }
+  .field {
+    @apply w-full rounded-xl bg-ink-800 px-3.5 py-2.5 text-[15px] text-white ring-1 ring-white/10 placeholder:text-mute-2 focus:ring-2 focus:ring-brand/70;
+  }
+  .label {
+    @apply mb-1.5 block text-[12px] font-semibold uppercase tracking-wider text-mute;
+  }
+  .safe-bottom {
+    padding-bottom: max(env(safe-area-inset-bottom), 12px);
+  }
+  .skeleton {
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.09) 50%, rgba(255, 255, 255, 0.04) 100%);
+    background-size: 200% 100%;
+    @apply animate-shimmer rounded-xl;
+  }
+}
