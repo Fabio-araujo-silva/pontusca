@@ -2,6 +2,9 @@
 
 > Pasta/pacotes ainda chamam `arquibancada` (nome antigo do projeto).
 
+📘 **[COMO-USAR.md](./COMO-USAR.md)** — guia de uso (organização, mesários, torcida, sandbox, celular).  
+🤖 **[AGENTS.md](./AGENTS.md)** — guia pra agentes de IA que forem mexer no código.
+
 Placar ao vivo dos jogos universitários que não têm cobertura (TUSCA, InterUSP e afins). Tem três frentes:
 
 - **Público** (`/`): sem login. No primeiro acesso pergunta a atlética e os esportes preferidos (fica no `localStorage`) e mostra um tutorial de 3 gestos. Mostra os jogos em cards no estilo Apple Sports, com placar e animação de gol ao vivo, lance a lance, escalações, agenda por dia, filtros, classificação geral e um print do placar pronto pra postar.

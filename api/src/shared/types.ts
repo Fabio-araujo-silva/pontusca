@@ -34,6 +34,7 @@ export interface SportAction {
   athlete?: 'required' | 'optional' | 'none'; // pede atleta ao registrar
   celebrate?: string; // texto da animação ao vivo, ex: "GOL!"
   decisive?: boolean; // encerra a disputa (ippon, finalização, nocaute) -> sugere fim
+  penalty?: boolean; // cobrança de pênalti/7m durante o jogo (gol de pênalti, pênalti perdido)
   short?: string; // rótulo curto da timeline
 }
 

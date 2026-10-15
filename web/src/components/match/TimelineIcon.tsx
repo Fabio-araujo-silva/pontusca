@@ -24,9 +24,16 @@ export function TimelineIcon({ icon, sportIcon = 'soccer', size = 16 }: { icon: 
   const s = { width: size, height: size };
   if (CARD[icon]) return <span className="inline-block rounded-[3px] shadow-sm" style={{ width: size * 0.62, height: size * 0.86, background: CARD[icon], transform: 'rotate(8deg)' }} />;
   switch (icon) {
+    case 'pen-goal':
+      // gol de pênalti: bola com um "P"
+      return (
+        <span className="relative inline-flex">
+          <SportIcon name={sportIcon} size={size} className="text-white" />
+          <span className="absolute -bottom-1 -right-1.5 rounded-[3px] bg-coal px-[3px] text-[8px] font-black leading-[11px] text-snow">P</span>
+        </span>
+      );
     case 'goal':
     case 'points':
-    case 'pen-goal':
     case 'run':
       return <SportIcon name={sportIcon} size={size} className="text-white" />;
     case 'own-goal':

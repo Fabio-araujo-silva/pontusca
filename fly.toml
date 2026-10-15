@@ -4,7 +4,7 @@ app = "arquibancada"
 primary_region = "gru"
 
 [env]
-  DATABASE_URL = "file:/data/arquibancada.db"
+  DATABASE_URL = "file:/data/arquibancada.db?connection_limit=1"
   PORT = "3000"
   WEB_ORIGIN = "https://arquibancada.fly.dev"
 

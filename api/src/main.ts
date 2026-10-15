@@ -20,7 +20,8 @@ async function bootstrap() {
   app.enableCors({ origin: (process.env.WEB_ORIGIN ?? 'http://localhost:5173').split(','), credentials: true });
   app.enableShutdownHooks();
   const port = Number(process.env.PORT ?? 3000);
-  await app.listen(port, '0.0.0.0');
+  // sem host = escuta em IPv4 e IPv6 (localhost no Windows resolve pra ::1 primeiro)
+  await app.listen(port);
   Logger.log(`Arquibancada no ar em http://localhost:${port}`, 'Boot');
 }
 void bootstrap();

@@ -12,6 +12,7 @@ import {
   actionIcon,
   formatClock,
   ix,
+  isPenalty,
   lifecycleItem,
   name,
   ord,
@@ -92,6 +93,7 @@ export function reduceScore(input: EngineInput): EngineOutput {
   const timeouts: [number, number] = [0, 0];
   let shootout: { home: number; away: number; kicks: { side: Side; scored: boolean }[] } | null = null;
   const stats = new ActionStats();
+  const pens = { taken: [0, 0], scored: [0, 0] };
   const timeline: TimelineItem[] = [];
   let highlight: Highlight | null = null;
 
@@ -196,10 +198,14 @@ export function reduceScore(input: EngineInput): EngineOutput {
           }
           if (a.decisive) decisive = credit;
           stats.add(a.key, side);
+          if (isPenalty(a)) {
+            pens.taken[ix(side)] += 1;
+            pens.scored[ix(side)] += 1;
+          }
           timeline.push({
             ...base,
             side: a.both ? null : credit,
-            icon: actionIcon('score', undefined, a.against, v > 1 ? 'points' : 'goal'),
+            icon: isPenalty(a) ? 'pen-goal' : actionIcon('score', undefined, a.against, v > 1 ? 'points' : 'goal'),
             title: a.short ?? a.label,
             subtitle: athlete ? (a.against ? `${athlete} (contra)` : athlete) : null,
             scoreAfter: [score[0], score[1]],
@@ -215,6 +221,7 @@ export function reduceScore(input: EngineInput): EngineOutput {
           };
         } else {
           stats.add(a.key, side);
+          if (isPenalty(a)) pens.taken[ix(side)] += 1;
           if (a.kind === 'foul') {
             const f = fouls.get(period) ?? [0, 0];
             f[ix(side)] += 1;
@@ -333,7 +340,20 @@ export function reduceScore(input: EngineInput): EngineOutput {
     winner,
     wo,
     timeline,
-    stats: stats.rows(cfg),
+    stats: stats.rows(
+      cfg,
+      [
+        // total real do placar (gol normal + de pênalti + gol contra a favor)
+        ...(cfg.actions.some((a) => a.kind === 'score') && phase !== 'PRE' ? [{ label: cfg.scoreLabel ?? 'Pontos', home: score[0], away: score[1] }] : []),
+        ...(pens.taken[0] || pens.taken[1]
+          ? [
+              { label: 'Pênaltis cobrados', home: pens.taken[0], away: pens.taken[1] },
+              { label: 'Pênaltis convertidos', home: pens.scored[0], away: pens.scored[1] },
+            ]
+          : []),
+      ],
+      (a) => isPenalty(a),
+    ),
     highlight,
   };
 }
@@ -378,13 +398,13 @@ export function buildScore(input: EngineInput, out: EngineOutput, cmd: MatchComm
       if (a.kind === 'score' && phase !== 'PERIOD') throw new EngineError('Pontos só valem com a bola rolando (período em andamento).');
       if (phase === 'PRE' || phase === 'END') throw new EngineError('O jogo não está em andamento.');
       // atleta é opcional na hora: o mesário marca o lance e diz quem fez depois
-      const { key: k, label, kind, value, against, both, color, short, celebrate, decisive, athlete } = a;
+      const { key: k, label, kind, value, against, both, color, short, celebrate, decisive, athlete, penalty } = a;
       return {
         type: 'ACTION',
         side,
         athleteId: cmd.athleteId ?? null,
         athlete2Id: kind === 'sub' ? (cmd.athlete2Id ?? null) : null,
-        payload: { key: k, label, kind, value, against, both, color, short, celebrate, decisive, athlete },
+        payload: { key: k, label, kind, value, against, both, color, short, celebrate, decisive, athlete, penalty },
       };
     }
     default:

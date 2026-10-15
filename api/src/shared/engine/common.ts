@@ -7,6 +7,7 @@ import type {
   MatchCommand,
   ScoreView,
   Side,
+  SportAction,
   SportConfig,
   StatRow,
   TimelineItem,
@@ -165,7 +166,7 @@ export function plural(label: string) {
   const out: string[] = [];
   let stop = false;
   for (const w of words) {
-    if (stop || /^(de|da|do|no|na|em|\(|\d)/i.test(w)) {
+    if (stop || /^(de|da|do|no|na|em|contra|\(|\d)/i.test(w)) {
       stop = true;
       out.push(w);
       continue;
@@ -217,15 +218,24 @@ export class ActionStats {
     c[ix(side)] += n;
     this.counts.set(key, c);
   }
-  rows(config: SportConfig, extra: StatRow[] = []): StatRow[] {
+  rows(config: SportConfig, extra: StatRow[] = [], skip: (a: SportAction) => boolean = () => false): StatRow[] {
     const rows: StatRow[] = [...extra];
+    const taken = new Set(extra.map((r) => r.label.toLowerCase()));
     for (const a of config.actions) {
+      if (skip(a)) continue;
       const c = this.counts.get(a.key);
       if (!c || (c[0] === 0 && c[1] === 0)) continue;
-      rows.push({ label: plural(a.short && a.kind !== 'score' ? a.short : a.short ?? a.label), home: c[0], away: c[1] });
+      const label = plural(a.short && a.kind !== 'score' ? a.short : a.short ?? a.label);
+      if (taken.has(label.toLowerCase())) continue; // ex.: "Gols" já é o total do placar
+      rows.push({ label, home: c[0], away: c[1] });
     }
     return rows;
   }
+}
+
+/** A ação é cobrança de pênalti? (flag nova; chave como fallback pra configs antigas) */
+export function isPenalty(a: Pick<SportAction, 'key' | 'penalty'>) {
+  return a.penalty ?? /penalty|seven/.test(a.key);
 }
 
 export function actionIcon(kind: string, color?: string, against?: boolean, sportScoreIcon = 'goal') {

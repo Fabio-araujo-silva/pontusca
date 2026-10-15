@@ -276,10 +276,10 @@ function goalsBySide(m: MatchDetail) {
   const out = { home: [] as string[], away: [] as string[] };
   for (const t of m.timeline) {
     if (t.type !== 'ACTION' || !t.important || !t.side) continue;
-    if (!['goal', 'own-goal', 'points'].includes(t.icon)) continue;
+    if (!['goal', 'own-goal', 'points', 'pen-goal'].includes(t.icon)) continue;
     if (t.icon === 'points' && !t.subtitle) continue;
     const who = t.subtitle ?? t.title;
-    out[t.side].push(`${who}${t.minute ? ` ${t.minute}` : ''}`);
+    out[t.side].push(`${who}${t.minute ? ` ${t.minute}` : ''}${t.icon === 'pen-goal' ? ' (pên.)' : ''}`);
   }
   // basquete e afins: dezenas de cestas não cabem na arte
   if (out.home.length + out.away.length > 14) return { home: [], away: [] };

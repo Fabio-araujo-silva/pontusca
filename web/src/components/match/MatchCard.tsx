@@ -14,15 +14,16 @@ import { cx, LiveDot, ScoreNumber } from '../ui/primitives';
 import { SportIcon } from '../ui/SportIcon';
 import { TeamFlag } from '../ui/TeamFlag';
 import { liveContext, phaseLine, sportLine, statusView, teamsOf } from './helpers';
+import { celebratesFullscreen } from './Celebration';
 import { MatchDetailPanel } from './MatchDetailPanel';
 import { TimelineIcon } from './TimelineIcon';
 
 export const MatchCard = memo(function MatchCard({ m, expanded, onToggle }: { m: MatchSummary; expanded?: boolean; onToggle?: () => void }) {
-  const { inst, sport } = usePublic();
+  const { inst, sport, focused } = usePublic();
   const sp = sport.get(m.sportId);
   const { profile } = useProfile();
   const fav = involves(m, profile.atleticaId);
-  const flash = useCardFlash(m.id);
+  const flash = useCardFlash(m.id, focused, profile.atleticaId);
 
   return (
     <motion.article layout="position" className={cx('card relative overflow-hidden', expanded && 'ring-white/[0.12]')}>
@@ -184,17 +185,19 @@ const iconForType = (t: string) => (t === 'ACTION' ? 'goal' : t === 'POINT' ? 'p
 
 // ---------------------------------------------------------------- flash de gol no card
 
-function useCardFlash(id: string) {
+function useCardFlash(id: string, focused: string | null, atleticaId: string | null) {
   const [flash, setFlash] = useState<{ h: Highlight; key: number } | null>(null);
   useEffect(
     () =>
       onHighlight(({ summary, highlight }) => {
         if (summary.id !== id) return;
+        // a tela cheia já comemora esse: o card não anima junto (evita GOL! duplicado)
+        if (celebratesFullscreen(summary, highlight, focused, atleticaId)) return;
         if (!['score', 'set', 'end', 'card', 'start', 'game'].includes(highlight.type)) return;
         if (highlight.type === 'score' && !highlight.big && (highlight.value ?? 1) < 2 && summary.score.tennis) return;
         setFlash({ h: highlight, key: Date.now() });
       }),
-    [id],
+    [id, focused, atleticaId],
   );
   useEffect(() => {
     if (!flash) return;
@@ -225,10 +228,10 @@ function CardFlash({ h, m, inst }: { h: Highlight; m: MatchSummary; inst: Map<st
         className="absolute inset-0"
         initial={{ x: left ? '-100%' : '100%' }}
         animate={{ x: '0%' }}
-        transition={{ type: 'spring', stiffness: 260, damping: 30 }}
+        transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
         style={{ background: `linear-gradient(${left ? 100 : 260}deg, ${color} 0%, ${alpha(color, 0.92)} 55%, ${alpha(color, 0.75)} 100%)` }}
       />
-      <motion.div className="relative text-center" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.12, type: 'spring', stiffness: 380, damping: 18 }} style={{ color: onColor(color) }}>
+      <motion.div className="relative text-center" initial={{ scale: 1.12, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.08, duration: 0.35, ease: [0.16, 1, 0.3, 1] }} style={{ color: onColor(color) }}>
         <div className="font-poster text-[54px] font-extrabold uppercase italic leading-none tracking-tight drop-shadow">{h.label}</div>
         <div className="mt-1 text-[13px] font-bold uppercase tracking-widest opacity-90">
           {[t?.name, h.athleteName].filter(Boolean).join(' · ')}

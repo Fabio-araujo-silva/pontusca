@@ -39,6 +39,23 @@ describe('SCORE (futebol)', () => {
     expect(out.stats.find((s) => s.label === 'Cartões amarelos' || s.label.startsWith('Cartão'))).toBeTruthy();
   });
 
+  it('"Gols" é o total do placar e pênaltis do jogo aparecem como pênalti', () => {
+    const { out } = play(f, [
+      { type: 'START_MATCH' },
+      { type: 'ACTION', side: 'home', payload: { action: 'goal' } },
+      { type: 'ACTION', side: 'home', payload: { action: 'penalty_goal' } },
+      { type: 'ACTION', side: 'away', payload: { action: 'own_goal' } }, // gol contra da visitante = gol da casa
+      { type: 'ACTION', side: 'home', payload: { action: 'penalty_miss' } },
+      { type: 'ACTION', side: 'away', payload: { action: 'goal' } },
+    ]);
+    const row = (l: string) => out.stats.find((s) => s.label === l);
+    expect([row('Gols')?.home, row('Gols')?.away]).toEqual([3, 1]);
+    expect([row('Pênaltis cobrados')?.home, row('Pênaltis convertidos')?.home]).toEqual([2, 1]);
+    expect(row('Gols de pênalti')).toBeUndefined();
+    expect(row('Gols contra')?.away).toBe(1);
+    expect(out.timeline.find((t) => t.title === 'Gol de pênalti')?.icon).toBe('pen-goal');
+  });
+
   it('oferece prorrogação e pênaltis depois do tempo normal e decide nos pênaltis', () => {
     const base: Partial<MatchCommand>[] = [{ type: 'START_MATCH' }, { type: 'END_PERIOD' }, { type: 'START_PERIOD' }, { type: 'END_PERIOD' }];
     const mid = play(f, base).out;

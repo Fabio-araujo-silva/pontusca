@@ -70,7 +70,7 @@ export const SPORTS_CATALOG: CatalogSport[] = [
       shootout: { label: 'Pênaltis', kicks: 5 },
       actions: [
         goal(),
-        { key: 'penalty_goal', label: 'Gol de pênalti', kind: 'score', value: 1, athlete: 'optional', celebrate: 'GOL!' },
+        { key: 'penalty_goal', label: 'Gol de pênalti', kind: 'score', value: 1, athlete: 'optional', celebrate: 'GOL!', penalty: true },
         ownGoal,
         yellow,
         red,
@@ -78,7 +78,7 @@ export const SPORTS_CATALOG: CatalogSport[] = [
         foul,
         { key: 'corner', label: 'Escanteio', kind: 'stat', athlete: 'none' },
         { key: 'shot', label: 'Finalização', kind: 'stat', athlete: 'none' },
-        { key: 'penalty_miss', label: 'Pênalti perdido', kind: 'stat', athlete: 'optional' },
+        { key: 'penalty_miss', label: 'Pênalti perdido', kind: 'stat', athlete: 'optional', penalty: true },
       ],
       lineup: { starters: 11, positions: ['GOL', 'ZAG', 'LAT', 'VOL', 'MEI', 'ATA'] },
     },
@@ -196,7 +196,7 @@ export const SPORTS_CATALOG: CatalogSport[] = [
       shootout: { label: 'Tiros de 7m', kicks: 5 },
       actions: [
         goal(),
-        { key: 'seven', label: 'Gol de 7m', kind: 'score', value: 1, athlete: 'optional', celebrate: 'GOL!' },
+        { key: 'seven', label: 'Gol de 7m', kind: 'score', value: 1, athlete: 'optional', celebrate: 'GOL!', penalty: true },
         { key: 'two_min', label: '2 minutos', kind: 'card', color: 'white', athlete: 'optional', short: 'Exclusão de 2 min' },
         yellow,
         red,
