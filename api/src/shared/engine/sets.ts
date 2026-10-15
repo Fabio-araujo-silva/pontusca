@@ -194,8 +194,8 @@ export function buildSets(input: EngineInput, out: EngineOutput, cmd: MatchComma
       const a = input.config.actions.find((x) => x.key === cmd.payload?.action);
       if (!a) throw new EngineError('Ação desconhecida para esta modalidade.');
       if (phase === 'PRE' || phase === 'END') throw new EngineError('O jogo não está em andamento.');
-      const { key, label, kind, color, short } = a;
-      return { type: 'ACTION', side, athleteId: cmd.athleteId ?? null, athlete2Id: kind === 'sub' ? (cmd.athlete2Id ?? null) : null, payload: { key, label, kind, color, short } };
+      const { key, label, kind, color, short, athlete } = a;
+      return { type: 'ACTION', side, athleteId: cmd.athleteId ?? null, athlete2Id: kind === 'sub' ? (cmd.athlete2Id ?? null) : null, payload: { key, label, kind, color, short, athlete } };
     }
     default:
       throw new EngineError('Comando não suportado nesta modalidade.');

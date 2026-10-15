@@ -1,24 +1,21 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { CalendarDays, ChevronDown, FlaskConical, Trophy, WifiOff, X } from 'lucide-react';
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { CalendarDays, FlaskConical, Trophy, WifiOff, X } from 'lucide-react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import type { TournamentDTO } from '@shared/types';
 import { Celebration } from '@/components/match/Celebration';
-import { cx, Sheet, Spinner } from '@/components/ui/primitives';
+import { cx, Spinner } from '@/components/ui/primitives';
 import { Logo } from '@/components/ui/Logo';
+import { Ticker } from '@/components/ui/Ticker';
 import { Bootstrap, useBootstrap, useLiveSync } from '@/lib/data';
-import { dayKey } from '@/lib/format';
 import { exitSandbox, SANDBOX } from '@/lib/sandbox';
 import { useConnected } from '@/lib/socket';
-
-const T_KEY = 'arq.tournament';
 
 interface PublicCtx {
   boot: Bootstrap;
   inst: ReturnType<typeof useBootstrap>['inst'];
   sport: ReturnType<typeof useBootstrap>['sport'];
   tournament: TournamentDTO | null;
-  setTournament: (id: string) => void;
   /** jogo aberto (card expandido/página) recebe a comemoração em tela cheia */
   focused: string | null;
   setFocused: (id: string | null) => void;
@@ -27,43 +24,14 @@ interface PublicCtx {
 const Ctx = createContext<PublicCtx>(null as any);
 export const usePublic = () => useContext(Ctx);
 
-/** Torneio "do momento": o que está rolando hoje, senão o próximo, senão o mais recente. */
-function pickDefault(ts: TournamentDTO[]) {
-  const today = dayKey(Date.now());
-  const running = ts.find((t) => t.startsAt && t.endsAt && dayKey(t.startsAt) <= today && today <= dayKey(t.endsAt));
-  if (running) return running;
-  const upcoming = ts.filter((t) => t.startsAt && dayKey(t.startsAt) > today).sort((a, b) => a.startsAt!.localeCompare(b.startsAt!))[0];
-  return upcoming ?? ts[0] ?? null;
-}
-
 export default function PublicLayout() {
   const b = useBootstrap();
   useLiveSync();
   const online = useConnected();
   const loc = useLocation();
-  const [tid, setTid] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem(SANDBOX ? `${T_KEY}.sb` : T_KEY);
-    } catch {
-      return null;
-    }
-  });
   const [focused, setFocused] = useState<string | null>(null);
-  const [picker, setPicker] = useState(false);
-
-  const tournament = useMemo(() => {
-    const ts = b.data?.tournaments ?? [];
-    return ts.find((t) => t.id === tid) ?? pickDefault(ts);
-  }, [b.data, tid]);
-
-  const setTournament = (id: string) => {
-    setTid(id);
-    try {
-      localStorage.setItem(SANDBOX ? `${T_KEY}.sb` : T_KEY, id);
-    } catch {
-      /* ignore */
-    }
-  };
+  // o torneio é definido pelo admin ("torneio do momento"); o público não escolhe
+  const tournament = b.data?.tournaments[0] ?? null;
 
   useEffect(() => {
     if (tournament) document.title = `${tournament.name}${tournament.edition ? ' ' + tournament.edition : ''} · Arquibancada`;
@@ -76,7 +44,7 @@ export default function PublicLayout() {
       </div>
     );
 
-  const ctx: PublicCtx = { boot: b.data, inst: b.inst, sport: b.sport, tournament, setTournament, focused, setFocused };
+  const ctx: PublicCtx = { boot: b.data, inst: b.inst, sport: b.sport, tournament, focused, setFocused };
 
   return (
     <Ctx.Provider value={ctx}>
@@ -91,6 +59,17 @@ export default function PublicLayout() {
             </button>
           </div>
         )}
+        {tournament && (
+          <Ticker
+            items={[
+              `${tournament.name}_${tournament.edition ?? ''}`.replace(/\s+/g, '_').replace(/_$/, ''),
+              'placar ao vivo',
+              tournament.city ? tournament.city.replace(/\s+/g, '_') : '',
+              'lance a lance',
+              /tusca/i.test(tournament.name) ? 'sou_tusqueiro' : 'atlética por atlética',
+            ]}
+          />
+        )}
         <header className="sticky top-0 z-30 border-b border-white/[0.05] bg-ink/85 px-4 pb-3 pt-[max(env(safe-area-inset-top),12px)] backdrop-blur-xl" style={SANDBOX ? { top: 30 } : undefined}>
           <div className="flex items-center justify-between gap-3">
             <NavLink to="/" aria-label="Início">
@@ -101,11 +80,15 @@ export default function PublicLayout() {
               <TopLink to="/classificacao" icon={<Trophy className="h-4 w-4" />} label="Classificação" />
             </nav>
           </div>
-          <button onClick={() => setPicker(true)} className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full bg-white/[0.06] py-1.5 pl-2 pr-3 text-[13px] font-semibold ring-1 ring-white/[0.06] transition hover:bg-white/[0.1]">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: tournament?.color ?? '#d7ff3e' }} />
-            <span className="truncate">{tournament ? `${tournament.name}${tournament.edition ? ' ' + tournament.edition : ''}` : 'Nenhum torneio ativo'}</span>
-            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-mute" />
-          </button>
+          {tournament && (
+            <div className="mt-2.5 flex items-center gap-2 text-[13px] font-semibold text-mute">
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: tournament.color ?? '#111114' }} />
+              <span className="truncate text-white">
+                {tournament.name} {tournament.edition}
+              </span>
+              {tournament.city && <span className="truncate">· {tournament.city}</span>}
+            </div>
+          )}
         </header>
 
         <AnimatePresence>
@@ -130,29 +113,6 @@ export default function PublicLayout() {
         </nav>
       </div>
 
-      <Sheet open={picker} onClose={() => setPicker(false)} title="Torneio">
-        <div className="space-y-1.5">
-          {ctx.boot.tournaments.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => {
-                setTournament(t.id);
-                setPicker(false);
-              }}
-              className={cx('flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition', t.id === tournament?.id ? 'bg-white/[0.09]' : 'hover:bg-white/[0.05]')}
-            >
-              <span className="h-9 w-9 shrink-0 rounded-xl" style={{ background: `linear-gradient(135deg, ${t.color ?? '#d7ff3e'}, #15161a)` }} />
-              <span className="min-w-0">
-                <span className="block truncate text-[15px] font-semibold">
-                  {t.name} {t.edition}
-                </span>
-                <span className="block text-[12px] text-mute">{[t.city, t.startsAt && new Date(t.startsAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })].filter(Boolean).join(' · ')}</span>
-              </span>
-            </button>
-          ))}
-          {!ctx.boot.tournaments.length && <p className="py-6 text-center text-mute">Nenhum torneio publicado ainda.</p>}
-        </div>
-      </Sheet>
 
       <Celebration />
     </Ctx.Provider>

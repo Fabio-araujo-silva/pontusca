@@ -8,6 +8,7 @@ import { useSearchParams } from 'react-router-dom';
 import type { Gender, MatchSummary } from '@shared/types';
 import { MatchCard } from '@/components/match/MatchCard';
 import { Button, cx, Empty, LiveDot, Sheet } from '@/components/ui/primitives';
+import { SectionTag } from '@/components/ui/Ticker';
 import { SportIcon } from '@/components/ui/SportIcon';
 import { TeamFlag } from '@/components/ui/TeamFlag';
 import { useFeed } from '@/lib/data';
@@ -131,13 +132,15 @@ export default function Home() {
   if (!tournament) return <Empty icon={<CalendarX2 className="h-6 w-6" />} title="Nenhum torneio no ar">Assim que a organização publicar a tabela, os jogos aparecem aqui.</Empty>;
 
   const toggle = (id: string) => setOpen((cur) => (cur === id ? null : id));
-  const section = (title: string, items: MatchSummary[], accent?: JSX.Element) =>
+  const section = (title: string, items: MatchSummary[], tone: Parameters<typeof SectionTag>[0]['tone'], tilt = 0) =>
     items.length > 0 && (
-      <section className="mt-5">
-        <h2 className="mb-2 flex items-center gap-2 px-1 text-[13px] font-bold uppercase tracking-wider text-mute">
-          {accent}
-          {title}
-          <span className="font-semibold text-mute-2">{items.length}</span>
+      <section className="mt-6">
+        <h2 className="mb-2.5 flex items-center gap-2">
+          <SectionTag tone={tone} tilt={tilt}>
+            {tone === 'live' && <span className="h-2 w-2 animate-pulse rounded-full bg-snow" />}
+            {title}
+          </SectionTag>
+          <span className="font-display text-[17px] text-mute-2">{items.length}</span>
         </h2>
         <div className="space-y-2.5">
           {items.map((m) => (
@@ -192,10 +195,10 @@ export default function Home() {
         </div>
       ) : (
         <LayoutGroup>
-          {showLive && section('Ao vivo', live, <LiveDot />)}
-          {section('Próximos', upcoming)}
-          {section('Encerrados', done)}
-          {section('Adiados ou cancelados', off)}
+          {showLive && section('Ao vivo', live, 'live', -1.5)}
+          {section('Próximos', upcoming, 'orange', 1)}
+          {section('Encerrados', done, 'black', -1)}
+          {section('Adiados ou cancelados', off, 'purple')}
           {!showLive && !ofDay.length && (
             <Empty icon={<CalendarX2 className="h-6 w-6" />} title={activeCount || f.fav ? 'Nenhum jogo com esses filtros neste dia' : 'Sem jogos neste dia'}>
               {(() => {
@@ -322,7 +325,7 @@ function DateStrip({ days, today, day, perDay, onPick }: { days: string[]; today
         return (
           <button key={d} data-day={d} onClick={() => onPick(d)} className={cx('relative flex min-w-[64px] shrink-0 flex-col items-center rounded-2xl px-2.5 pb-2 pt-1.5 transition', active ? 'text-black' : 'text-white/80 hover:bg-white/[0.05]')}>
             {active && <motion.span layoutId="day-pill" className="absolute inset-0 rounded-2xl bg-white" transition={{ type: 'spring', stiffness: 500, damping: 40 }} />}
-            <span className={cx('relative text-[13px] font-bold', !active && c.diff === 0 && 'text-brand')}>{c.top}</span>
+            <span className={cx('relative font-display text-[17px] uppercase leading-tight', !active && c.diff === 0 && 'text-pop-orange')}>{c.top}</span>
             <span className={cx('relative text-[11px] font-medium', active ? 'text-black/60' : 'text-mute')}>{c.bottom}</span>
             <span className="relative mt-1 h-1.5">
               {info?.live ? <LiveDot className="scale-75" /> : info?.n ? <span className={cx('block h-1.5 w-1.5 rounded-full', active ? 'bg-black/50' : 'bg-white/40')} /> : null}

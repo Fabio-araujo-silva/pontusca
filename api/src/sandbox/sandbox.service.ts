@@ -114,11 +114,13 @@ export class SandboxService implements OnApplicationBootstrap, OnModuleDestroy {
         slug: `sandbox-${now.toString(36)}`,
         edition: 'teste',
         isSandbox: true,
+        isCurrent: true,
         startsAt: new Date(now - 86400_000),
         endsAt: new Date(now + 3 * 86400_000),
         color: '#f59e0b',
       },
     });
+    await this.prisma.tournament.updateMany({ where: { isSandbox: true, NOT: { id: t.id } }, data: { isCurrent: false } });
     await this.prisma.scoringRule.create({ data: { tournamentId: t.id, placementPoints: '[13,10,8,6,4,2,1]', racePoints: '[9,7,6,5,4,3,2,1]' } });
 
     let insts = await this.prisma.institution.findMany({ where: { isSandbox: false } });

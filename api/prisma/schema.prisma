@@ -88,9 +88,12 @@ model Tournament {
   startsAt    DateTime?
   endsAt      DateTime?
   active      Boolean           @default(true)
+  isCurrent   Boolean           @default(false) // o torneio que o público vê (um por ambiente)
   isSandbox   Boolean           @default(false)
   tiebreakers String            @default("[\"POINTS\",\"GOLD\",\"SILVER\",\"BRONZE\",\"WINS\",\"SCORE_DIFF\"]")
   color       String?
+  banner      String? // imagem do evento (URL ou data URL) — topo da classificação
+  bannerLink  String? // pra onde o banner leva (ingressos, instagram...)
   matches     Match[]
   rules       ScoringRule[]
   placements  Placement[]

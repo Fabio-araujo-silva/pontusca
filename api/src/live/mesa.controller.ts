@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, Header, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Header, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
 import { z } from 'zod';
 import { AuthGuard, AuthUser, CurrentUser, Roles } from '../auth/auth';
 import { toInstitution, toSport, toTournament } from '../common/mappers';
@@ -132,6 +132,13 @@ export class MesaController {
   @Post('matches/:id/events/:eventId/void')
   voidEvent(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('eventId') eventId: string) {
     return this.live.voidEvent(user, id, eventId);
+  }
+
+  /** Atribui (ou corrige) o atleta de um lance já registrado. */
+  @Patch('matches/:id/events/:eventId')
+  assign(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('eventId') eventId: string, @Body() body: unknown) {
+    const b = parse(z.object({ athleteId: z.string().max(40).nullish(), athlete2Id: z.string().max(40).nullish() }), body);
+    return this.live.assignAthlete(user, id, eventId, b);
   }
 
   @Put('matches/:id/lineup')

@@ -171,6 +171,29 @@ export class LiveService implements OnApplicationBootstrap {
     });
   }
 
+  /**
+   * Diz quem fez um lance já registrado (fluxo "marca primeiro, autor depois").
+   * undefined = não mexe; null = limpa.
+   */
+  async assignAthlete(user: AuthUser | null, id: string, eventId: string, who: { athleteId?: string | null; athlete2Id?: string | null }) {
+    return this.lock(id, async () => {
+      const e = await this.entry(id);
+      this.assertCanOperate(user, e.match);
+      const ev = e.events.find((x) => x.id === eventId);
+      if (!ev) throw new NotFoundException('Lance não encontrado (ou foi desfeito).');
+      for (const a of [who.athleteId, who.athlete2Id]) if (a && !e.names[a]) throw new BadRequestException('Atleta fora da escalação deste jogo.');
+      const data: { athleteId?: string | null; athlete2Id?: string | null } = {};
+      if (who.athleteId !== undefined) data.athleteId = who.athleteId;
+      if (who.athlete2Id !== undefined) data.athlete2Id = who.athlete2Id;
+      await this.prisma.matchEvent.update({ where: { id: eventId }, data });
+      Object.assign(ev, data);
+      this.compute(e);
+      await this.persist(e);
+      this.publish(e, null);
+      return { summary: e.summary, event: ev };
+    });
+  }
+
   /** Recarrega do banco depois de edição do admin (times, horário, escalação...). */
   async refresh(id: string, structural = false) {
     return this.lock(id, async () => {

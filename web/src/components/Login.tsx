@@ -28,11 +28,9 @@ export function Login({ title, subtitle }: { title: string; subtitle: string }) 
 
   return (
     <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden px-5">
-      <div className="pointer-events-none absolute -left-40 -top-40 h-[480px] w-[480px] rounded-full bg-brand/10 blur-[120px]" />
-      <div className="pointer-events-none absolute -bottom-40 -right-40 h-[420px] w-[420px] rounded-full bg-live/10 blur-[120px]" />
       <motion.form initial={{ y: 16, opacity: 0 }} animate={{ y: 0, opacity: 1 }} onSubmit={submit} className="relative w-full max-w-sm">
         <Logo size={36} sub={subtitle} />
-        <h1 className="mt-8 font-display text-[40px] font-extrabold uppercase leading-none">{title}</h1>
+        <h1 className="mt-10 font-display text-[34px] font-bold leading-none uppercase">{title}</h1>
         <p className="mt-2 text-[14px] text-mute">Entre com o e-mail e a senha que o admin cadastrou.</p>
         <div className="mt-7 space-y-3">
           <label className="relative block">

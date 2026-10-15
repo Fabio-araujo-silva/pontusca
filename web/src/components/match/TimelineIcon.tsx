@@ -3,7 +3,7 @@ import { SportIcon } from '../ui/SportIcon';
 
 const CARD: Record<string, string> = {
   'card-yellow': '#ffd60a',
-  'card-red': '#ff3b30',
+  'card-red': '#e0261d',
   'card-blue': '#0a84ff',
   'card-green': '#30d158',
   'card-white': '#f2f2f7',

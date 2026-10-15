@@ -28,12 +28,12 @@ function Diamond({ bases, onToggle, disabled }: { bases: [boolean, boolean, bool
   ];
   return (
     <svg viewBox="0 0 92 84" className="h-[124px] w-[136px]">
-      <path d="M46 76 L76 46 L46 16 L16 46 Z" fill="none" stroke="rgba(255,255,255,.12)" strokeWidth="1.5" />
-      <rect x="40" y="70" width="12" height="12" transform="rotate(45 46 76)" fill="rgba(255,255,255,.35)" />
+      <path d="M46 76 L76 46 L46 16 L16 46 Z" fill="none" stroke="rgba(17,17,20,.12)" strokeWidth="1.5" />
+      <rect x="40" y="70" width="12" height="12" transform="rotate(45 46 76)" fill="rgba(17,17,20,.35)" />
       {pos.map((p) => (
         <g key={p.i} onClick={() => !disabled && onToggle(p.i)} style={{ cursor: disabled ? 'default' : 'pointer' }}>
           <rect x={p.x - 13} y={p.y - 13} width="26" height="26" fill="transparent" />
-          <rect x={p.x - 9} y={p.y - 9} width="18" height="18" rx="2.5" transform={`rotate(45 ${p.x} ${p.y})`} fill={bases[p.i] ? '#d7ff3e' : 'rgba(255,255,255,.08)'} stroke="rgba(255,255,255,.35)" strokeWidth="1.2" />
+          <rect x={p.x - 9} y={p.y - 9} width="18" height="18" rx="2.5" transform={`rotate(45 ${p.x} ${p.y})`} fill={bases[p.i] ? '#111114' : 'rgba(17,17,20,.08)'} stroke="rgba(17,17,20,.35)" strokeWidth="1.2" />
         </g>
       ))}
     </svg>

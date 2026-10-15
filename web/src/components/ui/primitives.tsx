@@ -15,7 +15,7 @@ const VARIANTS: Record<Variant, string> = {
   brand: 'bg-brand text-brand-ink hover:brightness-95',
   ghost: 'bg-transparent text-white hover:bg-white/[0.06]',
   soft: 'bg-white/[0.07] text-white hover:bg-white/[0.11]',
-  danger: 'bg-live text-white hover:brightness-110',
+  danger: 'bg-live text-snow hover:brightness-110',
   outline: 'bg-transparent text-white ring-1 ring-inset ring-white/15 hover:bg-white/[0.05]',
 };
 
@@ -155,7 +155,7 @@ export function Sheet({
     <AnimatePresence>
       {open && (
         <motion.div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center sm:p-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+          <div className="absolute inset-0 bg-coal/40 backdrop-blur-[2px]" onClick={onClose} />
           <motion.div
             role="dialog"
             aria-modal
@@ -163,7 +163,7 @@ export function Sheet({
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 40, opacity: 0, scale: 0.98 }}
             transition={{ type: 'spring', stiffness: 380, damping: 34 }}
-            className={cx('relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-ink-850 ring-1 ring-white/10 sm:rounded-[28px]', wide ? 'sm:max-w-3xl' : 'sm:max-w-lg')}
+            className={cx('relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[24px] bg-ink-850 shadow-glow ring-1 ring-white/[0.06] sm:rounded-[24px]', wide ? 'sm:max-w-3xl' : 'sm:max-w-lg')}
           >
             {tone && <div className="absolute inset-x-0 top-0 h-1" style={{ background: tone }} />}
             <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-white/15 sm:hidden" />
@@ -196,8 +196,8 @@ export function HoldButton({
   children,
   ms = 900,
   className = '',
-  color = '#ffffff',
-  textColor = '#000000',
+  color = '#111114',
+  textColor = '#ffffff',
   disabled,
 }: {
   onConfirm: () => void;
@@ -250,7 +250,7 @@ export function HoldButton({
       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && !e.repeat && begin()}
       onKeyUp={stop}
       className={cx('relative isolate h-16 w-full select-none overflow-hidden rounded-2xl font-bold tracking-wide ring-1 ring-white/10 transition active:scale-[0.99] disabled:opacity-40', className)}
-      style={{ background: 'rgba(255,255,255,.08)', color: '#fff', touchAction: 'none' }}
+      style={{ background: 'rgb(var(--fg) / .08)', color: 'rgb(var(--fg))', touchAction: 'none' }}
     >
       <span className="absolute inset-y-0 left-0 -z-10" style={{ width: `${p * 100}%`, background: color }} />
       <span className="relative z-10 inline-flex -translate-y-1.5 items-center gap-2 text-[16px]" style={{ color: p > 0.5 ? textColor : '#fff', transition: 'color .15s' }}>
@@ -292,7 +292,7 @@ export function Toaster() {
             exit={{ y: -10, opacity: 0 }}
             className={cx(
               'pointer-events-auto max-w-sm rounded-2xl px-4 py-2.5 text-[14px] font-semibold shadow-glow backdrop-blur-xl',
-              t.tone === 'err' && 'bg-live/90 text-white',
+              t.tone === 'err' && 'bg-live text-snow',
               t.tone === 'ok' && 'bg-white/95 text-black',
               t.tone === 'info' && 'bg-ink-700/95 text-white ring-1 ring-white/10',
             )}
@@ -336,7 +336,7 @@ export function Confirm({
       title={title}
       footer={
         hold ? (
-          <HoldButton onConfirm={onConfirm} color={danger ? '#ff3b30' : '#ffffff'} textColor={danger ? '#fff' : '#000'}>
+          <HoldButton onConfirm={onConfirm} color={danger ? '#e0261d' : '#111114'} textColor="#ffffff">
             {confirmLabel}
           </HoldButton>
         ) : (

@@ -27,12 +27,24 @@ export default function Standings() {
   if (!tournament) return <Empty icon={<Trophy className="h-6 w-6" />} title="Nenhum torneio no ar" />;
   const data = q.data;
 
+  const banner = tournament.banner ? (
+    <img src={tournament.banner} alt={`${tournament.name} ${tournament.edition ?? ''}`} className="block w-full rounded-2xl object-cover ring-1 ring-white/[0.08]" style={{ aspectRatio: '16 / 5.6' }} />
+  ) : null;
+
   return (
     <div className="px-4 pt-4">
+      {banner &&
+        (tournament.bannerLink ? (
+          <a href={tournament.bannerLink} target="_blank" rel="noreferrer" className="mb-5 block transition active:scale-[0.99]">
+            {banner}
+          </a>
+        ) : (
+          <div className="mb-5">{banner}</div>
+        ))}
       <div className="flex items-end justify-between gap-3">
         <div>
           <p className="text-[12px] font-bold uppercase tracking-wider text-mute">Classificação</p>
-          <h1 className="font-display text-[34px] font-extrabold uppercase leading-none">
+          <h1 className="font-display text-[34px] font-bold leading-none uppercase">
             {tournament.name} {tournament.edition}
           </h1>
         </div>
@@ -77,8 +89,8 @@ function General({ rows, inst, sport }: { rows: StandingRow[]; inst: Map<string,
               <Link to={`/atletica/${i.slug}`} className="mt-2 max-w-full truncate text-[14px] font-bold hover:underline">
                 {i.name}
               </Link>
-              <span className="font-display text-[22px] font-bold tabular">{fmtScore(r.points)}</span>
-              <div className="mt-1.5 flex w-full items-start justify-center rounded-t-2xl pt-2 font-display text-[34px] font-extrabold" style={{ height: heights[r.position] ?? 70, background: `linear-gradient(180deg, ${tone}, ${tone}55)`, color: onColor(tone) }}>
+              <span className="font-display text-[22px] font-bold tabular uppercase">{fmtScore(r.points)}</span>
+              <div className="mt-1.5 flex w-full items-start justify-center rounded-t-2xl pt-2 font-display text-[34px] font-extrabold uppercase" style={{ height: heights[r.position] ?? 70, background: `linear-gradient(180deg, ${tone}, ${tone}55)`, color: onColor(tone) }}>
                 {r.position}º
               </div>
             </motion.div>
@@ -115,7 +127,7 @@ function General({ rows, inst, sport }: { rows: StandingRow[]; inst: Map<string,
                 <span className="text-center text-[13px] tabular">{r.gold || '·'}</span>
                 <span className="text-center text-[13px] tabular">{r.silver || '·'}</span>
                 <span className="text-center text-[13px] tabular">{r.bronze || '·'}</span>
-                <span className="text-right font-display text-[19px] font-bold tabular">{fmtScore(r.points)}</span>
+                <span className="text-right font-display text-[19px] font-bold tabular uppercase">{fmtScore(r.points)}</span>
               </button>
               {isOpen && (
                 <div className="bg-white/[0.02] px-4 pb-3 pt-1">
@@ -207,7 +219,7 @@ function Modalities({ data, inst, sport }: { data: StandingsDTO; inst: Map<strin
                         <span className="truncate font-semibold">{i.name}</span>
                       </span>
                     </td>
-                    <td className="text-center font-display text-[16px] font-bold">{fmtScore(r.points)}</td>
+                    <td className="text-center font-display text-[16px] font-bold uppercase">{fmtScore(r.points)}</td>
                     <td className="text-center text-white/75">{r.played}</td>
                     <td className="text-center text-white/75">{r.wins}</td>
                     <td className="text-center text-white/75">{r.draws}</td>

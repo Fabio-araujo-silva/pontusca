@@ -18,7 +18,7 @@ function TeamCol({ inst, align }: { inst: InstitutionDTO | null; align: 'left' |
     <div className={`flex min-w-0 flex-1 items-center gap-2 ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}>
       <TeamFlag inst={c.inst} size={34} />
       <div className="min-w-0">
-        <div className="truncate font-display text-[19px] font-bold uppercase leading-none tracking-wide">{c.inst.name}</div>
+        <div className="truncate font-display text-[19px] font-bold leading-none uppercase">{c.inst.name}</div>
         <div className="mt-1 h-1 w-8 rounded-full" style={{ background: c.tone, marginLeft: align === 'right' ? 'auto' : 0 }} />
       </div>
     </div>
@@ -36,7 +36,7 @@ export const Scoreboard = memo(function Scoreboard({ out, cfg, home, away, title
   return (
     <div
       className="relative overflow-hidden rounded-[24px] px-4 pb-3 pt-3 ring-1 ring-white/[0.07]"
-      style={{ background: ranking ? '#15161a' : `linear-gradient(100deg, ${alpha(hc.tone, 0.22)} 0%, #15161a 38%, #15161a 62%, ${alpha(ac.tone, 0.22)} 100%)` }}
+      style={{ background: ranking ? 'rgb(var(--ink-850))' : `linear-gradient(100deg, ${alpha(hc.tone, 0.14)} 0%, rgb(var(--ink-850)) 36%, rgb(var(--ink-850)) 64%, ${alpha(ac.tone, 0.14)} 100%)` }}
     >
       <div className="mb-2 flex items-center justify-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/70">
         {live && <LiveDot />}
@@ -49,11 +49,11 @@ export const Scoreboard = memo(function Scoreboard({ out, cfg, home, away, title
       </div>
 
       {ranking ? (
-        <div className="text-center font-display text-[26px] font-extrabold uppercase leading-tight">{title || 'Prova'}</div>
+        <div className="text-center font-display text-[26px] font-bold leading-tight uppercase">{title || 'Prova'}</div>
       ) : (
         <div className="flex items-center gap-2">
           <TeamCol inst={home} align="left" />
-          <div className="flex shrink-0 items-center gap-2 font-display text-[52px] font-extrabold leading-none">
+          <div className="flex shrink-0 items-center gap-2 font-display text-[52px] font-extrabold leading-none uppercase">
             <ScoreNumber value={S.home} dim={out.winner === 'away'} />
             <span className="text-[28px] text-white/30">–</span>
             <ScoreNumber value={S.away} dim={out.winner === 'home'} />
@@ -64,7 +64,7 @@ export const Scoreboard = memo(function Scoreboard({ out, cfg, home, away, title
 
       {/* detalhes por motor */}
       {S.tennis && L.phase === 'PERIOD' && (
-        <div className="mt-2 flex items-center justify-center gap-6 font-display text-[22px] font-bold">
+        <div className="mt-2 flex items-center justify-center gap-6 font-display text-[22px] font-bold uppercase">
           <span className="flex items-center gap-1.5">
             {S.tennis.server === 'home' && <span className="h-2 w-2 rounded-full bg-brand" />}
             {S.tennis.game[0]}

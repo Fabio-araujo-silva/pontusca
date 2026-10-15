@@ -161,7 +161,7 @@ const ShareArt = forwardRef<HTMLDivElement, ArtProps>(function ShareArt({ m, spo
   const scorers = goalsBySide(m);
 
   return (
-    <div ref={ref} style={{ width: W, height: H, background: mix(P, '#000000', 0.55), color: ink, fontFamily: "'Inter Variable', Inter, sans-serif", position: 'relative', overflow: 'hidden' }}>
+    <div ref={ref} style={{ width: W, height: H, background: mix(P, '#000000', 0.55), color: ink, fontFamily: "'Funnel Display Variable', sans-serif", position: 'relative', overflow: 'hidden' }}>
       {/* bandeira gigante inclinada no fundo */}
       <svg width={W * 1.6} height={H * 1.1} viewBox="0 0 150 100" preserveAspectRatio="xMidYMid slice" style={{ position: 'absolute', left: -W * 0.3, top: -H * 0.05, transform: 'rotate(-8deg)', opacity: 0.9 }}>
         <FlagPatternShapes pattern={bgInst.flagPattern} p={P} s={S} a={bgInst.accentColor} w={150} h={100} />
@@ -191,7 +191,7 @@ const ShareArt = forwardRef<HTMLDivElement, ArtProps>(function ShareArt({ m, spo
                 </div>
                 <ArtTeam inst={teams.away} dim={m.winner === 'home'} />
               </div>
-              <div style={{ marginTop: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 46, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: story ? 330 : 300, lineHeight: 0.9, letterSpacing: -6 }}>
+              <div style={{ marginTop: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 46, fontFamily: "'Big Shoulders Display Variable', sans-serif", fontWeight: 800, fontSize: story ? 330 : 300, lineHeight: 0.9, letterSpacing: -6 }}>
                 <span style={{ opacity: m.winner === 'away' ? 0.5 : 1 }}>{fmtScore(m.score.home)}</span>
                 <span style={{ fontSize: 140, opacity: 0.4 }}>–</span>
                 <span style={{ opacity: m.winner === 'home' ? 0.5 : 1 }}>{fmtScore(m.score.away)}</span>
@@ -199,7 +199,7 @@ const ShareArt = forwardRef<HTMLDivElement, ArtProps>(function ShareArt({ m, spo
               {m.score.periods.length > 1 && (
                 <div style={{ marginTop: 28, display: 'flex', justifyContent: 'center', gap: 16 }}>
                   {m.score.periods.map((p, i) => (
-                    <span key={i} style={{ padding: '8px 18px', borderRadius: 14, background: 'rgba(255,255,255,.1)', fontSize: 30, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif" }}>
+                    <span key={i} style={{ padding: '8px 18px', borderRadius: 14, background: 'rgba(255,255,255,.1)', fontSize: 30, fontWeight: 700, fontFamily: "'Big Shoulders Display Variable', sans-serif" }}>
                       {fmtScore(p[0])}–{fmtScore(p[1])}
                     </span>
                   ))}
@@ -213,20 +213,20 @@ const ShareArt = forwardRef<HTMLDivElement, ArtProps>(function ShareArt({ m, spo
               )}
             </div>
             {winner && !live && (
-              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: story ? 120 : 104, lineHeight: 0.95, textTransform: 'uppercase', letterSpacing: -1 }}>
+              <div style={{ fontFamily: "'Big Shoulders Display Variable', sans-serif", fontWeight: 800, fontSize: story ? 120 : 104, lineHeight: 0.95, textTransform: 'uppercase', letterSpacing: -1 }}>
                 {winner.name}
                 <br />
                 <span style={{ color: S === P ? '#d7ff3e' : mix(S, '#ffffff', 0.15) }}>venceu.</span>
               </div>
             )}
-            {m.winner === 'draw' && !live && <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 104, textTransform: 'uppercase' }}>Empate.</div>}
+            {m.winner === 'draw' && !live && <div style={{ fontFamily: "'Big Shoulders Display Variable', sans-serif", fontWeight: 800, fontSize: 104, textTransform: 'uppercase' }}>Empate.</div>}
           </>
         )}
 
         {/* rodapé */}
         <div style={{ marginTop: 40, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 24, fontWeight: 600, opacity: 0.75 }}>
           <span>{[longDate(m.scheduledAt), m.venue].filter(Boolean).join(' · ')}</span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 12, fontFamily: "'Barlow Condensed', sans-serif", fontSize: 34, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', opacity: 1 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 12, fontFamily: "'Big Shoulders Display Variable', sans-serif", fontSize: 34, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', opacity: 1 }}>
             <LogoMark size={44} /> Arquibancada
           </span>
         </div>
@@ -241,7 +241,7 @@ function ArtTeam({ inst, dim }: { inst: InstitutionDTO; dim?: boolean }) {
       <div style={{ filter: 'drop-shadow(0 18px 30px rgba(0,0,0,.45))' }}>
         <TeamFlag inst={inst} size={170} shape="flag" />
       </div>
-      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 58, textTransform: 'uppercase', lineHeight: 1, textAlign: 'center' }}>{inst.name}</div>
+      <div style={{ fontFamily: "'Big Shoulders Display Variable', sans-serif", fontWeight: 800, fontSize: 58, textTransform: 'uppercase', lineHeight: 1, textAlign: 'center' }}>{inst.name}</div>
       {inst.university && <div style={{ fontSize: 22, fontWeight: 600, opacity: 0.65, marginTop: -8 }}>{inst.university}</div>}
     </div>
   );
@@ -252,7 +252,7 @@ function RankingArt({ m, inst, story }: { m: MatchDetail; inst: Map<string, Inst
   const medal = ['#ffd60a', '#e5e7eb', '#d0884f'];
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 22 }}>
-      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 120, textTransform: 'uppercase', lineHeight: 0.95 }}>{m.title}</div>
+      <div style={{ fontFamily: "'Big Shoulders Display Variable', sans-serif", fontWeight: 800, fontSize: 120, textTransform: 'uppercase', lineHeight: 0.95 }}>{m.title}</div>
       {rows.map((r) => {
         const i = inst.get(r.institutionId);
         return (
@@ -263,7 +263,7 @@ function RankingArt({ m, inst, story }: { m: MatchDetail; inst: Map<string, Inst
               <div style={{ fontSize: 36, fontWeight: 800 }}>{r.athleteName ?? i?.name}</div>
               <div style={{ fontSize: 24, opacity: 0.7, fontWeight: 600 }}>{i?.name}</div>
             </div>
-            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 56 }}>{r.result}</span>
+            <span style={{ fontFamily: "'Big Shoulders Display Variable', sans-serif", fontWeight: 800, fontSize: 56 }}>{r.result}</span>
           </div>
         );
       })}

@@ -8,7 +8,7 @@ import { Button, cx, Empty } from '@/components/ui/primitives';
 import { FlagPatternShapes, TeamFlag } from '@/components/ui/TeamFlag';
 import { get } from '@/lib/api';
 import { useFeed } from '@/lib/data';
-import { alpha, fmtScore, mix, onColor } from '@/lib/format';
+import { alpha, fmtScore } from '@/lib/format';
 import { useFavorites } from '@/lib/hooks';
 import { usePublic } from './PublicLayout';
 
@@ -32,21 +32,20 @@ export default function InstitutionPage() {
   const next = mine.filter((m) => m.status === 'SCHEDULED').slice(0, 4);
   const past = mine.filter((m) => m.status === 'FINISHED').reverse().slice(0, 6);
   const row = standings.data?.rows.find((r) => r.institutionId === inst.id);
-  const ink = onColor(mix(inst.primaryColor, '#000', 0.3));
   const fav = isFav(inst.id);
 
   return (
     <div>
-      <div className="relative overflow-hidden px-4 pb-6 pt-8" style={{ background: mix(inst.primaryColor, '#000', 0.4), color: ink }}>
+      <div className="relative overflow-hidden px-4 pb-6 pt-8" style={{ background: inst.primaryColor }}>
         <svg className="absolute inset-0 h-full w-full opacity-60" viewBox="0 0 150 100" preserveAspectRatio="xMidYMid slice" aria-hidden>
           <FlagPatternShapes pattern={inst.flagPattern} p={inst.primaryColor} s={inst.secondaryColor} a={inst.accentColor} w={150} h={100} />
         </svg>
-        <div className="absolute inset-0" style={{ background: `linear-gradient(180deg, ${alpha('#000000', 0.15)}, ${alpha('#060708', 0.95)})` }} />
+        <div className="absolute inset-0" style={{ background: `linear-gradient(180deg, ${alpha('#ffffff', 0)} 0%, ${alpha('#ffffff', 0.75)} 55%, #ffffff 100%)` }} />
         <div className="relative flex items-end gap-4">
           <TeamFlag inst={inst} size={84} />
-          <div className="min-w-0 flex-1 text-white">
-            <h1 className="font-display text-[42px] font-extrabold uppercase leading-none">{inst.name}</h1>
-            <p className="mt-1 truncate text-[13px] text-white/75">{[inst.fullName, inst.university].filter(Boolean).join(' · ')}</p>
+          <div className="min-w-0 flex-1">
+            <h1 className="font-display text-[42px] font-bold leading-none uppercase">{inst.name}</h1>
+            <p className="mt-1 truncate text-[13px] text-mute">{[inst.fullName, inst.university].filter(Boolean).join(' · ')}</p>
           </div>
         </div>
         <div className="relative mt-5 flex gap-2">
@@ -81,7 +80,7 @@ export default function InstitutionPage() {
 
 const Stat = ({ label, value }: { label: string; value: string }) => (
   <div>
-    <div className="font-display text-[24px] font-bold leading-none tabular">{value}</div>
+    <div className="font-display text-[24px] font-bold leading-none tabular uppercase">{value}</div>
     <div className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-mute">{label}</div>
   </div>
 );

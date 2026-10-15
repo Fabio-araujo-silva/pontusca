@@ -5,18 +5,30 @@
 // é enviada em ordem; sem rede, tenta de novo com backoff. O clientId garante
 // que um retry nunca duplica o lance no servidor.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { buildEvent, EngineError, EngineInput, runEngine } from '@shared/engine';
+import { authorSlots, buildEvent, EngineError, EngineInput, missingAuthor, runEngine } from '@shared/engine';
 import type { EngineEvent, MatchCommand, MatchDetail, MatchSummary, Side } from '@shared/types';
-import { ApiError, get, post, put } from '@/lib/api';
+import { ApiError, get, patch, post, put } from '@/lib/api';
 import { vibrate } from '@/lib/hooks';
 import { serverNow, useConnected, useRooms, useSocketEvent } from '@/lib/socket';
 import { toast } from '@/components/ui/primitives';
 import type { Cmd, EngineState, MesaMatch } from './types';
 
+/** Quem fez o lance (undefined = não mexe). */
+export interface Who {
+  athleteId?: string | null;
+  athlete2Id?: string | null;
+}
+
 interface QueueItem {
   clientId: string;
-  cmd: MatchCommand;
-  event: EngineEvent;
+  cmd?: MatchCommand; // lance novo
+  event?: EngineEvent; // versão otimista do lance
+  assign?: Who & { target: string }; // autor atribuído depois (id do servidor ou tmp-<clientId>)
+}
+
+/** Lance que acabou de entrar e ainda pede autor ("quem fez?"). */
+export interface AuthorAsk {
+  eventId: string;
 }
 
 const qKey = (id: string) => `arq.mesa.queue.${id}`;
@@ -35,6 +47,16 @@ const saveQueue = (id: string, q: QueueItem[]) => {
     /* ignore */
   }
 };
+const idsKey = (id: string) => `arq.mesa.ids.${id}`;
+const loadIds = (id: string): Record<string, string> => {
+  try {
+    return JSON.parse(localStorage.getItem(idsKey(id)) || '{}');
+  } catch {
+    return {};
+  }
+};
+const clean = (w: Who): Who => Object.fromEntries(Object.entries(w).filter(([, v]) => v !== undefined));
+
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const isNetwork = (e: unknown) => !(e instanceof ApiError) || e.status >= 500 || e.status === 408 || e.status === 429;
@@ -48,6 +70,10 @@ export function useConsole(id: string) {
   const inflight = useRef<string | null>(null);
   const flushing = useRef(false);
   const alive = useRef(true);
+  const [ask, setAsk] = useState<AuthorAsk | null>(null);
+  // clientId -> id do servidor (pra atribuir autor a um lance que já subiu)
+  const idMap = useRef<Record<string, string>>(loadIds(id));
+  const resolveId = useCallback((eid: string) => (eid.startsWith('tmp-') ? (idMap.current[eid.slice(4)] ?? eid) : eid), []);
   const dataRef = useRef(data);
   dataRef.current = data;
   const connected = useConnected();
@@ -81,7 +107,17 @@ export function useConsole(id: string) {
   }, [reload]);
 
   // ---- motor local
-  const events = useMemo(() => (data ? [...data.engine.events, ...queue.map((q) => q.event)] : []), [data, queue]);
+  const events = useMemo(() => {
+    if (!data) return [];
+    const list = [...data.engine.events, ...queue.filter((q) => q.event).map((q) => q.event!)];
+    const assigns = queue.filter((q) => q.assign);
+    if (!assigns.length) return list;
+    return list.map((e) => {
+      let x = e;
+      for (const q of assigns) if (resolveId(q.assign!.target) === e.id || q.assign!.target === e.id) x = { ...x, ...clean(q.assign!) };
+      return x;
+    });
+  }, [data, queue, resolveId]);
   const input = useMemo<EngineInput | null>(
     () => (data ? { config: data.engine.config, events, names: data.engine.names, participants: data.engine.participants, manual: data.engine.manual } : null),
     [data, events],
@@ -103,11 +139,32 @@ export function useConsole(id: string) {
         const item = queueRef.current[0];
         inflight.current = item.clientId;
         try {
+          if (item.assign) {
+            const target = resolveId(item.assign.target);
+            if (target.startsWith('tmp-')) {
+              // o lance original foi recusado/descartado: nada pra atribuir
+              setQueue((q) => q.filter((x) => x.clientId !== item.clientId));
+              continue;
+            }
+            const who = clean({ athleteId: item.assign.athleteId, athlete2Id: item.assign.athlete2Id });
+            await patch(`/mesa/matches/${id}/events/${target}`, who);
+            delay = 1000;
+            setSyncIssue(false);
+            setData((d) => (d ? { ...d, engine: { ...d.engine, events: d.engine.events.map((e) => (e.id === target ? { ...e, ...who } : e)) } } : d));
+            setQueue((q) => q.filter((x) => x.clientId !== item.clientId));
+            continue;
+          }
           const r = await post<{ summary: MatchSummary; event: EngineEvent | null; duplicate: boolean }>(`/mesa/matches/${id}/commands`, item.cmd);
           delay = 1000;
           setSyncIssue(false);
           const ev = r.event;
           if (ev) {
+            idMap.current[item.clientId] = ev.id;
+            try {
+              localStorage.setItem(idsKey(id), JSON.stringify(idMap.current));
+            } catch {
+              /* ignore */
+            }
             setData((d) => (d && !d.engine.events.some((e) => e.id === ev.id) ? { ...d, engine: { ...d.engine, events: [...d.engine.events, ev] } } : d));
           } else mustReload = true;
           setQueue((q) => q.filter((x) => x.clientId !== item.clientId));
@@ -130,7 +187,7 @@ export function useConsole(id: string) {
       flushing.current = false;
     }
     if (mustReload && alive.current) await reload();
-  }, [id, reload, setQueue]);
+  }, [id, reload, setQueue, resolveId]);
 
   useEffect(() => {
     if (queueRef.current.length) void flush();
@@ -165,9 +222,32 @@ export function useConsole(id: string) {
       inputRef.current = { ...inp, events: [...inp.events, event] };
       outRef.current = runEngine(inputRef.current);
       setQueue((q) => [...q, { clientId, cmd: full, event }]);
+      // marca primeiro, diz quem fez depois: abre a barra "quem fez?" sem travar o próximo lance
+      if (authorSlots(event, inp.config) && missingAuthor(event, inp.config)) setAsk({ eventId: event.id });
       vibrate(14);
       void flush();
       return true;
+    },
+    [flush, setQueue],
+  );
+
+  /** Diz quem fez um lance (já enviado ou ainda na fila). Funciona offline. */
+  const assign = useCallback(
+    (eventId: string, who: Who) => {
+      const w = clean(who);
+      if (eventId.startsWith('tmp-')) {
+        const cid = eventId.slice(4);
+        const queued = queueRef.current.find((x) => x.clientId === cid && x.cmd);
+        if (queued && inflight.current !== cid) {
+          // ainda não subiu: mescla direto no comando
+          setQueue((q) => q.map((x) => (x.clientId === cid ? { ...x, cmd: { ...x.cmd!, ...w }, event: { ...x.event!, ...w } } : x)));
+          vibrate(10);
+          return;
+        }
+      }
+      setQueue((q) => [...q, { clientId: uuid(), assign: { target: eventId, ...w } }]);
+      vibrate(10);
+      void flush();
     },
     [flush, setQueue],
   );
@@ -231,7 +311,10 @@ export function useConsole(id: string) {
     [id, patchFrom],
   );
 
-  const pendingIds = useMemo(() => new Set(queue.map((q) => q.event.id)), [queue]);
+  const pendingIds = useMemo(() => new Set(queue.filter((q) => q.event).map((q) => q.event!.id)), [queue]);
+  const unassigned = useMemo(() => (data ? events.filter((e) => missingAuthor(e, data.engine.config)) : []), [data, events]);
+  /** acha o lance mesmo depois que o id temporário virou o do servidor */
+  const findEvent = useCallback((eid: string) => events.find((e) => e.id === eid || e.id === resolveId(eid)) ?? null, [events, resolveId]);
 
   // ---- tempo real
   useRooms([`match:${id}`]);
@@ -266,6 +349,11 @@ export function useConsole(id: string) {
     connected,
     send,
     voidEvent,
+    assign,
+    ask,
+    setAsk,
+    unassigned,
+    findEvent,
     reload,
     saveLineup,
     addAthlete,

@@ -390,7 +390,7 @@ function Linescore({ d, teams, sp }: { d: MatchDetail; teams: { home: Institutio
 }
 
 export function Diamond({ bases, size = 64 }: { bases: [boolean, boolean, boolean]; size?: number }) {
-  const sq = (x: number, y: number, on: boolean) => <rect x={x - 9} y={y - 9} width={18} height={18} transform={`rotate(45 ${x} ${y})`} fill={on ? '#d7ff3e' : 'transparent'} stroke={on ? '#d7ff3e' : 'rgba(255,255,255,.35)'} strokeWidth={2.5} rx={2} />;
+  const sq = (x: number, y: number, on: boolean) => <rect x={x - 9} y={y - 9} width={18} height={18} transform={`rotate(45 ${x} ${y})`} fill={on ? '#111114' : 'transparent'} stroke={on ? '#111114' : 'rgba(17,17,20,.35)'} strokeWidth={2.5} rx={2} />;
   return (
     <svg width={size} height={size * 0.75} viewBox="0 0 80 60" aria-label="bases">
       {sq(40, 14, bases[1])}
@@ -405,7 +405,7 @@ function Count({ label, n, max, color }: { label: string; n: number; max: number
     <div className="flex items-center gap-1.5">
       <span className="w-3">{label}</span>
       {Array.from({ length: max - (label === 'B' ? 1 : 1) }, (_, i) => (
-        <span key={i} className="h-2.5 w-2.5 rounded-full" style={{ background: i < n ? color : 'rgba(255,255,255,.12)' }} />
+        <span key={i} className="h-2.5 w-2.5 rounded-full" style={{ background: i < n ? color : 'rgb(var(--fg) / .12)' }} />
       ))}
     </div>
   );
@@ -427,7 +427,7 @@ function RankingTable({ d, inst, sp }: { d: MatchDetail; inst: Map<string, Insti
           const i = inst.get(r.institutionId);
           return (
             <li key={r.participantId} className="flex items-center gap-3 py-2.5">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-black" style={{ background: r.position ? (medal[r.position - 1] ?? 'rgba(255,255,255,.08)') : 'rgba(255,255,255,.05)', color: r.position && r.position <= 3 ? '#000' : '#fff' }}>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-black" style={{ background: r.position ? (medal[r.position - 1] ?? 'rgb(var(--fg) / .08)') : 'rgb(var(--fg) / .05)', color: r.position && r.position <= 3 ? '#000' : '#fff' }}>
                 {r.position ?? '–'}
               </span>
               {i && <TeamFlag inst={i} size={26} />}

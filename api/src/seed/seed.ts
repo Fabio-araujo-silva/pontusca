@@ -14,8 +14,8 @@ const prisma = new PrismaClient();
 
 // Cores/nomes de exemplo — ajuste no painel (Atléticas) com as oficiais.
 const INSTITUTIONS = [
-  { name: 'CAASO', fullName: 'Centro Acadêmico Armando de Salles Oliveira', university: 'USP São Carlos', city: 'São Carlos', slug: 'caaso', primaryColor: '#b91c1c', secondaryColor: '#111111', flagPattern: 'diagonal' },
-  { name: 'UFSCar', fullName: 'Associação Atlética Acadêmica UFSCar', university: 'UFSCar', city: 'São Carlos', slug: 'ufscar', primaryColor: '#1e40af', secondaryColor: '#ffffff', flagPattern: 'stripes' },
+  { name: 'CAASO', fullName: 'Centro Acadêmico Armando de Salles Oliveira', university: 'USP São Carlos', city: 'São Carlos', slug: 'caaso', primaryColor: '#373435', secondaryColor: '#ffca29', flagPattern: 'diagonal' },
+  { name: 'UFSCar', fullName: 'Associação Atlética Acadêmica UFSCar', university: 'UFSCar', city: 'São Carlos', slug: 'ufscar', primaryColor: '#ff0000', secondaryColor: '#008f23', accentColor: '#ffffff', flagPattern: 'stripes' },
   { name: 'Poli', fullName: 'Atlética da Escola Politécnica', university: 'USP', city: 'São Paulo', slug: 'poli', primaryColor: '#0f172a', secondaryColor: '#facc15', flagPattern: 'chevron' },
   { name: 'FEA', fullName: 'Atlética da FEA', university: 'USP', city: 'São Paulo', slug: 'fea', primaryColor: '#065f46', secondaryColor: '#f8fafc', flagPattern: 'split' },
   { name: 'Medicina', fullName: 'Atlética da Faculdade de Medicina', university: 'USP', city: 'São Paulo', slug: 'medicina', primaryColor: '#14532d', secondaryColor: '#fde047', flagPattern: 'cross' },
@@ -60,7 +60,7 @@ async function main() {
 
   if (!(await prisma.tournament.count({ where: { isSandbox: false } }))) {
     const t = await prisma.tournament.create({
-      data: { name: 'TUSCA', edition: '2026', slug: 'tusca-2026', city: 'São Carlos', startsAt: new Date('2026-10-29T12:00:00-03:00'), endsAt: new Date('2026-11-01T22:00:00-03:00'), color: '#dc2626' },
+      data: { name: 'TUSCA', edition: '2026', slug: 'tusca-2026', city: 'São Carlos', isCurrent: true, startsAt: new Date('2026-10-09T12:00:00-03:00'), endsAt: new Date('2026-10-12T22:00:00-03:00'), color: '#ff8a15', banner: '/banners/tusca-2026.svg' },
     });
     await prisma.scoringRule.create({ data: { tournamentId: t.id, placementPoints: '[13,10,8,6,4,2,1]', racePoints: '[9,7,6,5,4,3,2,1]' } });
     console.log('🏆 torneio TUSCA 2026 criado');

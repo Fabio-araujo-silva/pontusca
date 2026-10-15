@@ -39,7 +39,10 @@ export const toTournament = (t: Tournament): TournamentDTO => ({
   startsAt: t.startsAt?.toISOString() ?? null,
   endsAt: t.endsAt?.toISOString() ?? null,
   active: t.active,
+  isCurrent: t.isCurrent,
   isSandbox: t.isSandbox,
   tiebreakers: json<string[]>(t.tiebreakers, ['POINTS']),
   color: t.color,
+  banner: t.banner,
+  bannerLink: t.bannerLink,
 });

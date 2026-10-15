@@ -33,7 +33,7 @@ export function Celebration() {
         const team = highlight.side ? teamsOf(summary, inst)[highlight.side] : null;
         setShown({ key: Date.now(), h: highlight, m: summary, team });
         if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && (highlight.type === 'score' || highlight.type === 'end' || highlight.type === 'set')) {
-          const colors = team ? [team.primaryColor, team.secondaryColor, '#ffffff'] : ['#d7ff3e', '#ffffff', '#ff3b30'];
+          const colors = team ? [team.primaryColor, team.secondaryColor, '#ffffff'] : ['#111114', '#ffffff', '#e0261d'];
           const burst = (x: number, angle: number) => confetti({ particleCount: 90, spread: 70, startVelocity: 55, angle, origin: { x, y: 0.75 }, colors, scalar: 1.1, disableForReducedMotion: true });
           burst(0.1, 60);
           burst(0.9, 120);
@@ -50,7 +50,7 @@ export function Celebration() {
     return () => clearTimeout(t);
   }, [shown]);
 
-  const color = shown?.team ? teamTone(shown.team.primaryColor, shown.team.secondaryColor) : '#d7ff3e';
+  const color = shown?.team ? teamTone(shown.team.primaryColor, shown.team.secondaryColor) : '#111114';
   const ink = onColor(color);
   return (
     <AnimatePresence>
@@ -65,7 +65,7 @@ export function Celebration() {
               </motion.div>
             )}
             <motion.div
-              className="mt-5 font-display font-extrabold uppercase italic leading-[0.85] tracking-tight"
+              className="mt-5 font-poster font-extrabold uppercase italic leading-[0.85] tracking-tight"
               style={{ fontSize: 'clamp(72px, 22vw, 180px)', textShadow: '0 8px 40px rgba(0,0,0,.25)' }}
               initial={{ scale: 2.4, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -77,7 +77,7 @@ export function Celebration() {
               {[shown.team?.name, shown.h.athleteName].filter(Boolean).join(' · ')}
             </motion.div>
             {!shown.m.score.ranking && (
-              <motion.div className="mt-6 flex items-center gap-4 rounded-full px-6 py-2 font-display text-[40px] font-extrabold tabular" style={{ background: ink === '#ffffff' ? 'rgba(0,0,0,.22)' : 'rgba(255,255,255,.35)' }} initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.6 }}>
+              <motion.div className="mt-6 flex items-center gap-4 rounded-full px-6 py-2 font-display text-[40px] font-extrabold tabular" style={{ background: ink === '#ffffff' ? 'rgba(0,0,0,.22)' : 'rgb(var(--fg) / .35)' }} initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.6 }}>
                 <span className="font-sans text-[15px] font-bold not-italic">{teamsOf(shown.m, inst).home.name}</span>
                 <span>
                   {fmtScore(shown.m.score.home)} – {fmtScore(shown.m.score.away)}

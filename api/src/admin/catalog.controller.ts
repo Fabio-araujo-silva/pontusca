@@ -244,6 +244,8 @@ const TournamentBody = z.object({
   active: z.boolean().default(true),
   tiebreakers: z.array(z.string()).max(10).optional(),
   color: opt(z.string().regex(HEX)),
+  banner: opt(z.string().max(2_800_000, 'banner grande demais (máx ~2MB)')),
+  bannerLink: opt(z.string().url('link inválido').max(500)),
 });
 
 const d = (s?: string | null) => (s ? new Date(s.length === 10 ? `${s}T12:00:00-03:00` : s) : null);
@@ -281,13 +283,17 @@ export class TournamentsController {
         endsAt: d(b.endsAt),
         active: b.active,
         color: b.color ?? null,
+        banner: b.banner ?? null,
+        bannerLink: b.bannerLink ?? null,
         ...(b.tiebreakers && { tiebreakers: JSON.stringify(b.tiebreakers) }),
       },
     });
     // regra de pontuação padrão já nasce junto (o admin ajusta depois)
     await this.prisma.scoringRule.create({ data: { tournamentId: t.id, placementPoints: JSON.stringify([13, 10, 8, 6, 4, 2, 1]), racePoints: JSON.stringify([9, 7, 6, 5, 4, 3, 2, 1]) } });
+    const hasCurrent = await this.prisma.tournament.count({ where: { isSandbox: false, isCurrent: true } });
+    const saved = hasCurrent ? t : await this.prisma.tournament.update({ where: { id: t.id }, data: { isCurrent: true } });
     this.bus.emit('catalog');
-    return toTournament(t);
+    return toTournament(saved);
   }
 
   @Patch(':id')
@@ -303,12 +309,28 @@ export class TournamentsController {
         ...(b.endsAt !== undefined && { endsAt: d(b.endsAt) }),
         ...(b.active != null && { active: b.active }),
         ...(b.color !== undefined && { color: b.color }),
+        ...(b.banner !== undefined && { banner: b.banner }),
+        ...(b.bannerLink !== undefined && { bannerLink: b.bannerLink }),
         ...(b.tiebreakers && { tiebreakers: JSON.stringify(b.tiebreakers) }),
       },
     });
     this.bus.emit('catalog');
     this.bus.emit('standings', id);
     return toTournament(t);
+  }
+
+  /** Define o "torneio do momento": é o único que o site público mostra. */
+  @Post(':id/current')
+  async setCurrent(@Param('id') id: string) {
+    const t = await this.prisma.tournament.findUnique({ where: { id } });
+    if (!t) throw new NotFoundException('Torneio não encontrado.');
+    await this.prisma.$transaction([
+      this.prisma.tournament.updateMany({ where: { isSandbox: t.isSandbox, NOT: { id } }, data: { isCurrent: false } }),
+      this.prisma.tournament.update({ where: { id }, data: { isCurrent: true, active: true } }),
+    ]);
+    this.bus.emit('catalog');
+    this.bus.emit('feed', { tournamentId: id, isSandbox: t.isSandbox });
+    return { ok: true };
   }
 
   @Delete(':id')

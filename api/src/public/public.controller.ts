@@ -52,7 +52,8 @@ export class FeedService {
     const hit = this.boot.get(key);
     if (hit && Date.now() - hit.at < 10_000) return hit.json;
     const [tournaments, institutions, sports] = await Promise.all([
-      this.prisma.tournament.findMany({ where: { isSandbox: sandbox, active: true }, orderBy: [{ startsAt: 'desc' }, { createdAt: 'desc' }] }),
+      // só o torneio do momento (definido no admin); sem ele, o mais recente ativo
+      this.prisma.tournament.findMany({ where: { isSandbox: sandbox, active: true }, orderBy: [{ isCurrent: 'desc' }, { startsAt: 'desc' }, { createdAt: 'desc' }], take: 1 }),
       this.prisma.institution.findMany({ where: sandbox ? {} : { isSandbox: false }, orderBy: { name: 'asc' } }),
       this.prisma.sport.findMany({ orderBy: [{ order: 'asc' }, { name: 'asc' }] }),
     ]);

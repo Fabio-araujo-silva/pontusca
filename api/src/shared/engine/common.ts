@@ -67,6 +67,25 @@ export interface DraftEvent {
 
 export class EngineError extends Error {}
 
+/**
+ * Quantos atletas um lance pede (0, 1 ou 2 na substituição). Base do fluxo
+ * "marca o lance agora, diz quem fez depois" — vale pra toda modalidade.
+ */
+export function authorSlots(ev: Pick<EngineEvent, 'type' | 'payload'>, config: SportConfig): 0 | 1 | 2 {
+  if (ev.type === 'SHOOTOUT_KICK' || ev.type === 'HIT' || ev.type === 'RUN') return 1;
+  if (ev.type !== 'ACTION') return 0;
+  const kind = ev.payload?.kind;
+  const ath = ev.payload?.athlete ?? config.actions.find((a) => a.key === ev.payload?.key)?.athlete ?? 'optional';
+  if (ath === 'none' || !['score', 'card', 'sub'].includes(kind)) return 0;
+  return kind === 'sub' ? 2 : 1;
+}
+
+export function missingAuthor(ev: Pick<EngineEvent, 'type' | 'payload' | 'athleteId' | 'athlete2Id'>, config: SportConfig) {
+  const n = authorSlots(ev, config);
+  if (n === 2) return !ev.athleteId || !ev.athlete2Id;
+  return n === 1 && !ev.athleteId;
+}
+
 export const other = (s: Side): Side => (s === 'home' ? 'away' : 'home');
 export const ix = (s: Side) => (s === 'home' ? 0 : 1);
 

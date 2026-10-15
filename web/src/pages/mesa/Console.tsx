@@ -1,4 +1,4 @@
-import { ChevronLeft, CircleCheck, CloudOff, Ellipsis, Lock, Loader2, ShieldAlert, Users } from 'lucide-react';
+import { ChevronLeft, CircleCheck, CloudOff, Ellipsis, Lock, Loader2, ShieldAlert, UserRoundPen, Users } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { InstitutionDTO, Side } from '@shared/types';
@@ -7,7 +7,10 @@ import { SportIcon } from '@/components/ui/SportIcon';
 import { useBootstrap } from '@/lib/data';
 import { GENDER } from '@/lib/format';
 import { useWakeLock } from '@/lib/hooks';
+import { missingAuthor } from '@shared/engine';
+import { TimelineIcon } from '@/components/match/TimelineIcon';
 import { AthletePicker, PickerRequest } from './AthletePicker';
+import { AuthorBar, eventIcon, eventTitle } from './AuthorBar';
 import { BaseballPanel } from './BaseballPanel';
 import type { PanelCtx, PickOpts } from './ctx';
 import { teamColors } from './helpers';
@@ -52,6 +55,7 @@ export default function Console() {
   const [lineupOpen, setLineupOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [partsOpen, setPartsOpen] = useState(false);
+  const [unOpen, setUnOpen] = useState(false);
 
   const data = c.data;
   const out = c.out;
@@ -115,6 +119,14 @@ export default function Console() {
   const ended = out.status === 'FINISHED';
   const readOnly = !meta.canOperate;
   const disabled = readOnly || manual || ended;
+  const askEv = c.ask ? c.findEvent(c.ask.eventId) : null;
+  const asking = askEv && missingAuthor(askEv, cfg) && !disabled ? askEv : null;
+  const pickMore = async (step: 1 | 2) => {
+    if (!asking?.side || !c.ask) return;
+    const eid = c.ask.eventId;
+    const r = await pickAthlete(asking.side, { title: `${eventTitle(asking)} — ${step === 2 ? 'quem entrou?' : 'quem fez?'}`, optional: false });
+    if (r) c.assign(eid, step === 2 ? { athlete2Id: r } : { athleteId: r });
+  };
   const ctx: PanelCtx = { out, cfg, events: c.events, detail, home: meta.home, away: meta.away, disabled, sportIcon: meta.sport.icon, send: c.send, pickAthlete };
 
   const panel = (() => {
@@ -133,7 +145,7 @@ export default function Console() {
   })();
 
   return (
-    <div className="mx-auto min-h-[100dvh] max-w-3xl pb-24" style={{ touchAction: 'manipulation' }}>
+    <div className={cx('mx-auto min-h-[100dvh] max-w-3xl', asking ? 'pb-52' : 'pb-24')} style={{ touchAction: 'manipulation' }}>
       <header className="sticky top-0 z-30 bg-ink/90 px-3 pb-2 pt-[max(env(safe-area-inset-top),8px)] backdrop-blur-xl">
         <div className="mb-2 flex items-center gap-1">
           <Link to="/mesa" aria-label="Voltar" className="-ml-1 flex h-10 w-10 items-center justify-center rounded-full active:bg-white/10">
@@ -175,7 +187,7 @@ export default function Console() {
         {manual && <div className="rounded-2xl bg-white/[0.05] px-3 py-3 text-[13px] text-white/80">Resultado lançado manualmente pelo admin. O console fica bloqueado.</div>}
         {ended && !manual && (
           <div className="rounded-2xl bg-white/[0.05] px-4 py-3 text-[13px] text-white/80">
-            <p className="font-display text-[22px] font-extrabold uppercase text-white">Jogo encerrado</p>
+            <p className="font-display text-[22px] font-bold text-white uppercase">Jogo encerrado</p>
             Encerrou sem querer? Use “Desfazer último” nos lances para reabrir.
           </div>
         )}
@@ -189,12 +201,64 @@ export default function Console() {
           </section>
         )}
 
+        {c.unassigned.length > 0 && meta.canOperate && !manual && (
+          <button onClick={() => setUnOpen(true)} className="flex w-full items-center gap-3 rounded-2xl bg-warn/10 px-4 py-3 text-left ring-1 ring-warn/25 active:scale-[0.99]">
+            <UserRoundPen className="h-5 w-5 shrink-0 text-warn" />
+            <span className="flex-1 text-[14px] font-semibold">
+              {c.unassigned.length} lance{c.unassigned.length > 1 ? 's' : ''} sem autor
+              <span className="block text-[12px] font-medium text-mute">Toque pra dizer quem fez — dá pra deixar pro intervalo.</span>
+            </span>
+          </button>
+        )}
+
         <section className="pt-2">
           <MesaTimeline items={out.timeline} pendingIds={c.pendingIds} home={meta.home} away={meta.away} sportIcon={meta.sport.icon} canEdit={meta.canOperate && !manual} onVoid={c.voidEvent} />
         </section>
       </div>
 
       <AthletePicker req={picker} onClose={closePicker} />
+      <AuthorBar
+        ev={asking}
+        cfg={cfg}
+        lineups={detail.lineups}
+        events={c.events}
+        home={meta.home}
+        away={meta.away}
+        sportIcon={meta.sport.icon}
+        onAssign={(who) => c.ask && c.assign(c.ask.eventId, who)}
+        onMore={(step) => void pickMore(step)}
+        onClose={() => c.setAsk(null)}
+      />
+      <Sheet open={unOpen} onClose={() => setUnOpen(false)} title="Lances sem autor">
+        <div className="divide-y divide-white/[0.06]">
+          {c.unassigned
+            .slice()
+            .reverse()
+            .map((e) => {
+              const team = e.side === 'away' ? meta.away : meta.home;
+              const minute = out.timeline.find((t) => t.id === e.id)?.minute;
+              return (
+                <button
+                  key={e.id}
+                  onClick={() => {
+                    c.setAsk({ eventId: e.id });
+                    setUnOpen(false);
+                  }}
+                  className="flex w-full items-center gap-3 py-3 text-left active:bg-white/[0.03]"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.06]">
+                    <TimelineIcon icon={eventIcon(e)} sportIcon={meta.sport.icon} size={16} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-semibold">{eventTitle(e)}</span>
+                    <span className="block truncate text-[12px] text-mute">{[team?.name, minute].filter(Boolean).join(' · ')}</span>
+                  </span>
+                  <span className="text-[13px] font-semibold">Atribuir</span>
+                </button>
+              );
+            })}
+        </div>
+      </Sheet>
       <LineupSheet
         open={lineupOpen}
         onClose={() => setLineupOpen(false)}

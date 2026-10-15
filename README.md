@@ -64,9 +64,15 @@ npm run typecheck # api + web
 
 **Mesário offline.** Cada toque vira um comando com `clientId` e entra numa fila salva no aparelho. A fila é reenviada com backoff quando o sinal volta, e o servidor ignora duplicatas. Ações críticas (iniciar, encerrar período ou jogo) pedem **segurar o botão** pra confirmar.
 
+**Marca agora, autor depois** (estilo SofaScore, em toda modalidade). O toque em gol, cesta, ponto, cartão, substituição, pênalti ou rebatida já vale na hora. Aí sobe a barra "quem fez?" com as camisas, sem travar o próximo lance. O que ficar sem autor vai pra lista "Sem autor", pra preencher no intervalo. A atribuição usa a mesma fila offline, e no servidor é um `PATCH /api/mesa/matches/:id/events/:eventId`.
+
 **Titular e reserva.** Cada jogo tem um mesário titular e um reserva. O reserva só registra quando o admin libera, na hora, em Visão geral ou Jogos. Mesários só podem ser escalados nas modalidades em que estão habilitados.
 
 **Tempo real.** O Socket.IO tem duas salas: `feed` (o resumo de todos os jogos, que alimenta os cards) e `match:<id>`. O feed público e o detalhe de cada jogo ficam serializados em memória, então os torcedores não fazem consulta ao banco. Medido localmente: **1000 conexões simultâneas recebendo 22 mil atualizações em 20 s, latência p99 de 114 ms**.
+
+**Torneio do momento.** O público não escolhe torneio: vê só o que o admin marcou em Bastidores → Torneios → "Colocar no site" (um por ambiente, real e sandbox). Cada torneio pode ter um **banner** (upload ou URL, com link opcional) exibido no topo da Classificação. O modelo `web/public/banners/tusca-2026.svg` vem pronto.
+
+**Visual.** Tema claro, inspirado na identidade do TUSCA 2026: Big Shoulders Display (condensada pesada) nos títulos e placares, Funnel Display no texto, paleta pop em etiquetas chapadas e ticker preto com texto amarelo. As cores são variáveis CSS em `web/src/index.css`, e já existe um `[data-theme='dark']` pronto, se um dia quiserem modo noturno.
 
 **Pontuação do torneio** (Bastidores → Pontuação):
 

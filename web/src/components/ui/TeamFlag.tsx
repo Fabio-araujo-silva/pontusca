@@ -88,7 +88,7 @@ export function TeamFlag({
     return (
       <span
         className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden ${shape === 'crest' ? 'rounded-full' : 'rounded-[22%]'} ${className}`}
-        style={{ width: pxW, height: size, background: inst.secondaryColor, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.12)' }}
+        style={{ width: pxW, height: size, background: inst.secondaryColor, boxShadow: 'inset 0 0 0 1px rgba(17,17,20,.1)' }}
       >
         <img src={inst.logo} alt={inst.name} className="h-full w-full object-cover" draggable={false} />
       </span>
@@ -119,12 +119,12 @@ export function TeamFlag({
             y={h / 2}
             dy="0.36em"
             textAnchor="middle"
-            fontFamily="'Barlow Condensed', 'Inter Variable', sans-serif"
+            fontFamily="'Big Shoulders Display Variable', sans-serif"
             fontWeight={800}
             fontSize={shape === 'flag' ? fontSize * 1.05 : fontSize}
             letterSpacing="0.5"
             fill={text}
-            stroke={text === '#ffffff' ? 'rgba(0,0,0,.35)' : 'rgba(255,255,255,.35)'}
+            stroke={text === '#ffffff' ? 'rgba(0,0,0,.35)' : 'rgba(17,17,20,.35)'}
             strokeWidth={2.5}
             paintOrder="stroke"
           >
@@ -132,7 +132,7 @@ export function TeamFlag({
           </text>
         )}
       </g>
-      <rect x="0.5" y="0.5" width={w - 1} height={h - 1} rx={radius} fill="none" stroke="rgba(255,255,255,.14)" />
+      <rect x="0.5" y="0.5" width={w - 1} height={h - 1} rx={radius} fill="none" stroke="rgba(17,17,20,.14)" />
     </svg>
   );
 }

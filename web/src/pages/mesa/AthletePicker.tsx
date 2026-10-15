@@ -59,7 +59,7 @@ export function AthletePicker({ req, onClose }: { req: PickerRequest | null; onC
     <button
       onClick={() => pick(p.athleteId)}
       className="flex min-h-[84px] flex-col items-center justify-center rounded-2xl px-1 py-2 text-center ring-1 ring-white/10 transition active:scale-95"
-      style={{ background: 'rgba(255,255,255,.05)', touchAction: 'manipulation' }}
+      style={{ background: 'rgb(var(--fg) / .05)', touchAction: 'manipulation' }}
     >
       <span className="flex h-10 min-w-10 items-center justify-center rounded-xl px-1.5 font-display text-[26px] font-extrabold leading-none" style={{ background: req.color, color: req.fg }}>
         {p.number ?? '–'}

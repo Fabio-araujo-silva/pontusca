@@ -377,14 +377,14 @@ export function buildScore(input: EngineInput, out: EngineOutput, cmd: MatchComm
       if (!a) throw new EngineError('Ação desconhecida para esta modalidade.');
       if (a.kind === 'score' && phase !== 'PERIOD') throw new EngineError('Pontos só valem com a bola rolando (período em andamento).');
       if (phase === 'PRE' || phase === 'END') throw new EngineError('O jogo não está em andamento.');
-      if (a.athlete === 'required' && !cmd.athleteId) throw new EngineError('Escolha o atleta.');
-      const { key: k, label, kind, value, against, both, color, short, celebrate, decisive } = a;
+      // atleta é opcional na hora: o mesário marca o lance e diz quem fez depois
+      const { key: k, label, kind, value, against, both, color, short, celebrate, decisive, athlete } = a;
       return {
         type: 'ACTION',
         side,
         athleteId: cmd.athleteId ?? null,
         athlete2Id: kind === 'sub' ? (cmd.athlete2Id ?? null) : null,
-        payload: { key: k, label, kind, value, against, both, color, short, celebrate, decisive },
+        payload: { key: k, label, kind, value, against, both, color, short, celebrate, decisive, athlete },
       };
     }
     default:

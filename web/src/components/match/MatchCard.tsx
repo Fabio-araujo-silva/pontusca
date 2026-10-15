@@ -135,7 +135,7 @@ function RankingBody({ m, inst }: { m: MatchSummary; inst: Map<string, Instituti
             const i = inst.get(r.institutionId);
             return (
               <div key={r.participantId} className="flex items-center gap-2.5 text-[14px]">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-black text-black" style={{ background: medal[(r.position ?? 1) - 1] ?? '#3a3d47' }}>
+                <span className="flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-black text-coal" style={{ background: medal[(r.position ?? 1) - 1] ?? '#3a3d47' }}>
                   {r.position}
                 </span>
                 {i && <TeamFlag inst={i} size={22} />}
@@ -204,7 +204,7 @@ function useCardFlash(id: string) {
 
 function CardFlash({ h, m, inst }: { h: Highlight; m: MatchSummary; inst: Map<string, InstitutionDTO> }) {
   const t = h.side ? teamsOf(m, inst)[h.side] : null;
-  const color = t ? teamTone(t.primaryColor, t.secondaryColor) : h.type === 'card' ? '#ff3b30' : '#d7ff3e';
+  const color = t ? teamTone(t.primaryColor, t.secondaryColor) : h.type === 'card' ? '#e0261d' : '#111114';
   const left = h.side === 'home';
   if (!h.big && h.type === 'score') {
     return (
@@ -227,7 +227,7 @@ function CardFlash({ h, m, inst }: { h: Highlight; m: MatchSummary; inst: Map<st
         style={{ background: `linear-gradient(${left ? 100 : 260}deg, ${color} 0%, ${alpha(color, 0.92)} 55%, ${alpha(color, 0.75)} 100%)` }}
       />
       <motion.div className="relative text-center" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.12, type: 'spring', stiffness: 380, damping: 18 }} style={{ color: onColor(color) }}>
-        <div className="font-display text-[54px] font-extrabold uppercase italic leading-none tracking-tight drop-shadow">{h.label}</div>
+        <div className="font-poster text-[54px] font-extrabold uppercase italic leading-none tracking-tight drop-shadow">{h.label}</div>
         <div className="mt-1 text-[13px] font-bold uppercase tracking-widest opacity-90">
           {[t?.name, h.athleteName].filter(Boolean).join(' · ')}
           {h.type === 'end' && `${fmtScore(m.score.home)} – ${fmtScore(m.score.away)}`}

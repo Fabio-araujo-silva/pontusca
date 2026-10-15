@@ -46,7 +46,7 @@ function MatchRow({ item, boot }: { item: MesaListItem; boot: ReturnType<typeof 
             <div key={side as string} className="flex items-center gap-3">
               <TeamFlag inst={inst as typeof home} size={28} />
               <span className={cx('flex-1 truncate text-[16px] font-semibold', s.winner && s.winner !== side && s.winner !== 'draw' && 'text-white/50')}>{(inst as typeof home).name}</span>
-              {showScore && <span className="font-display text-[26px] font-extrabold tabular">{fmtScore(score as number)}</span>}
+              {showScore && <span className="font-display text-[26px] font-extrabold tabular uppercase">{fmtScore(score as number)}</span>}
             </div>
           ))}
         </div>
@@ -112,7 +112,7 @@ export default function MesaHome() {
           </IconButton>
         </div>
       </header>
-      <h1 className="mb-1 mt-2 font-display text-[34px] font-extrabold uppercase leading-none">Meus jogos</h1>
+      <h1 className="mb-1 mt-2 font-display text-[34px] font-bold leading-none uppercase">Meus jogos</h1>
       <p className="mb-5 text-[13px] text-mute">
         {longDate(Date.now())}. Abra o jogo e mantenha esta tela com você na quadra.
       </p>

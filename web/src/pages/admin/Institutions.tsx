@@ -113,7 +113,7 @@ export default function Institutions() {
               <div className="absolute inset-x-0 top-0 h-16 opacity-30" style={{ background: `linear-gradient(135deg, ${i.primaryColor}, transparent)` }} />
               <div className="relative flex flex-col items-center text-center">
                 <TeamFlag inst={i} size={64} />
-                <div className="mt-3 font-display text-[22px] font-extrabold uppercase leading-none">{i.name}</div>
+                <div className="mt-3 font-display text-[22px] font-bold leading-none uppercase">{i.name}</div>
                 <div className="mt-1 line-clamp-1 text-[12px] text-mute">{i.university ?? i.fullName ?? '—'}</div>
                 <div className="mt-2 flex items-center gap-2 text-[11px] text-mute-2">
                   {i.isSandbox && <SandboxBadge />}
@@ -227,7 +227,7 @@ export default function Institutions() {
               <div className="flex w-full items-center gap-2 rounded-xl bg-ink-800 px-3 py-2">
                 <TeamFlag inst={{ ...f, name: f.name || '?', accentColor: f.accentColor || null }} size={26} />
                 <span className="flex-1 truncate text-[14px] font-semibold">{f.name || 'Nome'}</span>
-                <span className="font-display text-[20px] font-bold">2</span>
+                <span className="font-display text-[20px] font-bold uppercase">2</span>
               </div>
             </div>
           </div>

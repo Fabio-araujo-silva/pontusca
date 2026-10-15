@@ -135,7 +135,7 @@ function ConfirmLifecycle({
         key={v}
         onClick={() => (action === 'START_MATCH' ? setServer(v as Side) : setWinner(v))}
         className={cx('flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl px-2 text-[14px] font-bold ring-2 transition active:scale-95', on ? 'ring-white' : 'ring-transparent opacity-70')}
-        style={{ background: color ?? 'rgba(255,255,255,.08)', color: fg ?? '#fff' }}
+        style={{ background: color ?? 'rgb(var(--fg) / .08)', color: fg ?? '#fff' }}
       >
         {label}
       </button>
@@ -148,7 +148,7 @@ function ConfirmLifecycle({
       onClose={onClose}
       title={action ? actionLabel(action, out, cfg) : ''}
       footer={
-        <HoldButton onConfirm={confirm} disabled={mustPick && !winner} color={action === 'END_MATCH' ? '#ff3b30' : '#d7ff3e'} textColor={action === 'END_MATCH' ? '#fff' : '#0a0b00'}>
+        <HoldButton onConfirm={confirm} disabled={mustPick && !winner} color={action === 'END_MATCH' ? '#e0261d' : '#111114'} textColor="#ffffff">
           {action ? actionLabel(action, out, cfg) : ''}
         </HoldButton>
       }

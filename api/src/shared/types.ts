@@ -345,9 +345,12 @@ export interface TournamentDTO {
   startsAt?: string | null;
   endsAt?: string | null;
   active: boolean;
+  isCurrent: boolean;
   isSandbox: boolean;
   tiebreakers: string[];
   color?: string | null;
+  banner?: string | null;
+  bannerLink?: string | null;
 }
 
 export interface StandingRow {

@@ -6,7 +6,7 @@ import { cx } from '@/components/ui/primitives';
 import { SportIcon } from '@/components/ui/SportIcon';
 import { alpha } from '@/lib/format';
 import type { PanelCtx } from './ctx';
-import { onField, SIDES, teamColors } from './helpers';
+import { SIDES, teamColors } from './helpers';
 import { CardGlyph } from './icons';
 
 export function useActionCounts(ctx: PanelCtx) {
@@ -17,34 +17,12 @@ export function useActionCounts(ctx: PanelCtx) {
   }, [ctx.events]);
 }
 
-/** Pede atleta(s) conforme a ação e registra. */
+/**
+ * Registra o lance NA HORA (estilo SofaScore). O autor é escolhido depois,
+ * na barra "quem fez?" que o console abre — vale pra qualquer modalidade.
+ */
 export async function runAction(ctx: PanelCtx, side: Side, a: SportAction) {
-  const lineup = ctx.detail.lineups[side];
-  let athleteId: string | null = null;
-  let athlete2Id: string | null = null;
-  if (a.kind === 'sub') {
-    const field = onField(lineup, ctx.events, side);
-    const bench = new Set(lineup.filter((p) => !field.has(p.athleteId)).map((p) => p.athleteId));
-    const out = await ctx.pickAthlete(side, { title: 'Substituição · quem SAI?', optional: true, preferred: field, preferredLabel: 'Em quadra', otherLabel: 'Banco' });
-    if (out === undefined) return;
-    const inn = await ctx.pickAthlete(side, { title: 'Substituição · quem ENTRA?', optional: true, preferred: bench, preferredLabel: 'Banco', otherLabel: 'Em quadra' });
-    if (inn === undefined) return;
-    athleteId = out;
-    athlete2Id = inn;
-  } else if (a.athlete && a.athlete !== 'none' && (lineup.length || a.athlete === 'required')) {
-    const field = onField(lineup, ctx.events, side);
-    const r = await ctx.pickAthlete(side, {
-      title: `${a.short ?? a.label} — de quem?`,
-      subtitle: a.against ? 'Gol contra: conta pro adversário' : undefined,
-      optional: a.athlete === 'optional',
-      preferred: field.size ? field : undefined,
-      preferredLabel: 'Em quadra',
-      otherLabel: 'Banco',
-    });
-    if (r === undefined) return;
-    athleteId = r;
-  }
-  ctx.send({ type: 'ACTION', side, athleteId, athlete2Id, payload: { action: a.key } });
+  ctx.send({ type: 'ACTION', side, payload: { action: a.key } });
 }
 
 function SecondaryIcon({ a }: { a: SportAction }) {
@@ -70,7 +48,7 @@ function SideColumn({ ctx, side, counts }: { ctx: PanelCtx; side: Side; counts: 
     <div className="flex min-w-0 flex-col gap-2">
       <div className="flex items-center gap-2 px-1">
         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: c.tone }} />
-        <span className="truncate font-display text-[17px] font-bold uppercase tracking-wide">{c.inst.name}</span>
+        <span className="truncate font-display text-[17px] font-bold uppercase">{c.inst.name}</span>
       </div>
       <div className={cx('grid gap-2', many ? 'grid-cols-2' : 'grid-cols-1')}>
         {scoreActs.map((a, i) => {
@@ -93,7 +71,7 @@ function SideColumn({ ctx, side, counts }: { ctx: PanelCtx; side: Side; counts: 
               disabled={!canScore}
               onClick={() => void runAction(ctx, side, a)}
               className={cx(
-                'relative flex flex-col items-center justify-center overflow-hidden rounded-2xl text-center font-display font-extrabold uppercase leading-none shadow-card transition active:scale-[0.96] disabled:opacity-35',
+                'relative flex flex-col items-center justify-center overflow-hidden rounded-2xl text-center font-display font-bold leading-none shadow-card transition active:scale-[0.96] disabled:opacity-35',
                 size,
                 a.decisive && 'ring-2 ring-white/70',
               )}
@@ -143,7 +121,7 @@ function Shootout({ ctx }: { ctx: PanelCtx }) {
           <div key={side} className={cx('rounded-2xl p-2 ring-2', nextSide === side ? 'ring-brand' : 'ring-transparent')} style={{ background: alpha(c.bg, 0.16) }}>
             <div className="mb-2 flex items-center justify-between px-1">
               <span className="truncate font-display text-[17px] font-bold uppercase">{c.inst.name}</span>
-              <span className="font-display text-[28px] font-extrabold">{so?.[side] ?? 0}</span>
+              <span className="font-display text-[28px] font-extrabold uppercase">{so?.[side] ?? 0}</span>
             </div>
             <div className="mb-2 flex min-h-[18px] flex-wrap gap-1 px-1">
               {mine.map((k, i) => (

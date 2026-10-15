@@ -241,24 +241,27 @@ export function reduceBaseball(input: EngineInput): EngineOutput {
 export function buildBaseball(input: EngineInput, out: EngineOutput, cmd: MatchCommand): DraftEvent {
   if (out.live.phase !== 'PERIOD') throw new EngineError('O jogo não está em andamento.');
   const p = cmd.payload ?? {};
+  // grava o lado no evento (time rebatedor / defensor) pra dar pra atribuir o atleta depois
+  const batting: Side = out.score.baseball?.half === 'bottom' ? 'home' : 'away';
+  const fielding: Side = batting === 'home' ? 'away' : 'home';
   switch (cmd.type) {
     case 'PITCH':
       if (!['BALL', 'STRIKE', 'FOUL'].includes(p.result)) throw new EngineError('Arremesso inválido.');
       return { type: 'PITCH', payload: { result: p.result } };
     case 'OUT':
-      return { type: 'OUT', athleteId: cmd.athleteId ?? null, payload: { label: p.label ?? null } };
+      return { type: 'OUT', side: batting, athleteId: cmd.athleteId ?? null, payload: { label: p.label ?? null } };
     case 'HIT':
-      return { type: 'HIT', athleteId: cmd.athleteId ?? null, payload: { kind: ['1B', '2B', '3B', 'HR'].includes(p.kind) ? p.kind : '1B' } };
+      return { type: 'HIT', side: batting, athleteId: cmd.athleteId ?? null, payload: { kind: ['1B', '2B', '3B', 'HR'].includes(p.kind) ? p.kind : '1B' } };
     case 'RUN':
-      return { type: 'RUN', athleteId: cmd.athleteId ?? null, payload: { n: Math.max(1, Math.min(4, Number(p.n) || 1)) } };
+      return { type: 'RUN', side: batting, athleteId: cmd.athleteId ?? null, payload: { n: Math.max(1, Math.min(4, Number(p.n) || 1)) } };
     case 'ERROR':
-      return { type: 'ERROR', athleteId: cmd.athleteId ?? null, payload: {} };
+      return { type: 'ERROR', side: fielding, athleteId: cmd.athleteId ?? null, payload: {} };
     case 'BASES':
       return { type: 'BASES', payload: { bases: [!!p.bases?.[0], !!p.bases?.[1], !!p.bases?.[2]] } };
     case 'ACTION': {
       const a = input.config.actions.find((x) => x.key === p.action);
       if (!a || !cmd.side) throw new EngineError('Ação inválida.');
-      return { type: 'ACTION', side: cmd.side, athleteId: cmd.athleteId ?? null, athlete2Id: cmd.athlete2Id ?? null, payload: { key: a.key, label: a.label, kind: a.kind, short: a.short } };
+      return { type: 'ACTION', side: cmd.side, athleteId: cmd.athleteId ?? null, athlete2Id: cmd.athlete2Id ?? null, payload: { key: a.key, label: a.label, kind: a.kind, short: a.short, athlete: a.athlete } };
     }
     default:
       throw new EngineError('Comando não suportado nesta modalidade.');

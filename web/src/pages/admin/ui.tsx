@@ -15,7 +15,7 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0">
-        <h1 className="font-display text-[34px] font-extrabold uppercase leading-none tracking-tight">{title}</h1>
+        <h1 className="font-display text-[34px] font-bold leading-none uppercase">{title}</h1>
         {subtitle && <div className="mt-1.5 text-[13px] text-mute">{subtitle}</div>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -156,7 +156,7 @@ export function MatchLine({ m, compact }: { m: MatchSummary; compact?: boolean }
             <TeamFlag inst={h} size={20} />
             <span className={cx('truncate', m.winner === 'away' && 'text-white/50')}>{h.name}</span>
             {showScore ? (
-              <span className="tabular shrink-0 font-display text-[17px] font-bold">
+              <span className="tabular shrink-0 font-display text-[17px] font-bold uppercase">
                 {fmtScore(m.score.home)}
                 <span className="mx-1 text-white/30">–</span>
                 {fmtScore(m.score.away)}
