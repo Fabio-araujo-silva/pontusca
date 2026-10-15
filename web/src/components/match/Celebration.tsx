@@ -1,7 +1,6 @@
 // Comemoração em tela cheia (estilo placar do Google) para o jogo que o
 // torcedor está acompanhando de perto: card expandido, página do jogo ou
 // jogo da atlética dele. Os outros cards ganham só o flash local.
-import confetti from 'canvas-confetti';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import type { Highlight, InstitutionDTO, MatchSummary } from '@shared/types';
@@ -41,10 +40,11 @@ export function Celebration() {
         if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && (highlight.type === 'score' || highlight.type === 'end' || highlight.type === 'set')) {
           const colors = team ? [team.primaryColor, team.secondaryColor, '#ffffff'] : ['#111114', '#ffffff', '#ff8a15'];
           // confete sai junto com o texto (um disparo só de cada lado, sem rajada atrasada)
-          setTimeout(() => {
+          // confete carregado na primeira comemoração (fora do pacote inicial)
+          void import('canvas-confetti').then(({ default: confetti }) => setTimeout(() => {
             confetti({ particleCount: 70, spread: 65, startVelocity: 50, angle: 60, origin: { x: 0, y: 0.8 }, colors, ticks: 220, disableForReducedMotion: true });
             confetti({ particleCount: 70, spread: 65, startVelocity: 50, angle: 120, origin: { x: 1, y: 0.8 }, colors, ticks: 220, disableForReducedMotion: true });
-          }, 120);
+          }, 120));
         }
         if ('vibrate' in navigator) navigator.vibrate?.([30, 50, 30]);
       }),

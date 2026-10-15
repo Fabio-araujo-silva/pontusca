@@ -55,7 +55,10 @@ Rode `npm test` e `npm run typecheck` antes de considerar algo pronto. Mudou reg
 - **Nova modalidade usando motor existente:** só config — adicione em `sports-catalog.ts` (ou pelo admin). Botões = `actions` (`kind`: score/card/sub/foul/timeout/stat; flags `against`, `both`, `decisive`, `penalty`, `athlete`).
 - **Novo motor:** crie `engine/<nome>.ts` com `reduceX(input) → EngineOutput` e `buildX(input, out, cmd) → DraftEvent`, registre em `engine/index.ts`, adicione o tipo em `EngineKind`, painel em `web/src/pages/mesa/`, validação no `ConfigSchema` (`admin/catalog.controller.ts`) e testes em `engine.spec.ts`.
 - **Estatísticas:** `ActionStats.rows(config, extra, skip)` em `engine/common.ts`. A primeira linha do SCORE é o total real do placar; pênaltis têm linhas próprias.
-- **Tempo real:** publique via `LiveBus` (`summary`, `feed`, `standings`, `catalog`, `staff`); o gateway repassa. No web, `useLiveSync` remenda o cache do react-query.
+- **Tempo real:** publique via `LiveBus` (`summary`, `feed`, `standings`, `catalog`, `staff`); o gateway repassa. Salas: `feed`/`feed:sandbox` (torcedores) recebem `tick` ENXUTO (só o que muda num lance); `ops`/`ops:sandbox` (painel, tela inicial do mesário) e `match:<id>` (console) recebem `summary` completo; `mesa` recebe `staff:changed`. No web, `useLiveSync` mescla o `tick` no cache do feed. Campo novo que muda durante o jogo → inclua no `tick` em `live.gateway.ts`.
+- **Respostas públicas** (feed, detalhe, classificação, bootstrap) são `Payload` (`common/payload.ts`): JSON + gzip + ETag calculados uma vez por versão, pedidos simultâneos agrupados (`Coalescer`). Não leia o banco por requisição pública; use o cache do `LiveService`.
+- **Edição do admin que mexe no estado do jogo** (zerar, resultado manual, apagar, trocar times) passa por `live.mutate(id, fn)`: roda na mesma fila dos lances do mesário.
+- Imagens enviadas (logo/banner) ficam como data URL no banco, mas no público viram `/api/public/media/...?v=hash` (cache eterno).
 
 ## Front: convenções
 

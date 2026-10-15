@@ -2,7 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { ScoringRule } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { json } from '../common/util';
-import { LiveBus } from '../live/live.service';
+import { Coalescer, Payload } from '../common/payload';
+import { LiveBus, LiveService } from '../live/live.service';
 import type { Gender, MatchSummary, ModalityTable, ModalityTableRow, StandingRow, StandingsDTO } from '../shared/types';
 
 interface Rule {
@@ -43,40 +44,52 @@ const toRule = (r: ScoringRule): Rule => ({
 
 @Injectable()
 export class StandingsService {
-  private cache = new Map<string, { data: StandingsDTO; json: string; dirty: boolean }>();
+  private cache = new Map<string, { payload: Payload; gen: number }>();
+  // versão por torneio: sobe quando algo que conta pontos muda
+  private gen = new Map<string, number>();
+  // último status/manual visto de cada jogo: lance de jogo AO VIVO não muda a classificação
+  private seen = new Map<string, string>();
+  private building = new Coalescer<Payload>();
 
   constructor(
     private prisma: PrismaService,
+    private live: LiveService,
     bus: LiveBus,
   ) {
-    bus.on('summary', (s: MatchSummary) => this.touch(s.tournamentId, s.status === 'FINISHED' || s.status === 'LIVE'));
-    bus.on('standings', (tid: string) => this.touch(tid, true));
-    bus.on('feed', (p: { tournamentId: string }) => this.touch(p.tournamentId, true));
+    bus.on('summary', (s: MatchSummary) => {
+      const now = `${s.status}|${s.manual}|${s.status === 'FINISHED' ? `${s.score.home}:${s.score.away}:${s.winner}:${s.wo}:${s.seq}` : ''}`;
+      const before = this.seen.get(s.id);
+      this.seen.set(s.id, now);
+      if (before !== now && (s.status === 'FINISHED' || before?.startsWith('FINISHED') || before === undefined)) this.touch(s.tournamentId);
+    });
+    bus.on('standings', (tid: string) => this.touch(tid));
+    bus.on('feed', (p: { tournamentId: string }) => this.touch(p.tournamentId));
   }
 
-  private touch(tid: string, really: boolean) {
-    const c = this.cache.get(tid);
-    if (c && really) c.dirty = true;
+  private touch(tid: string) {
+    this.gen.set(tid, (this.gen.get(tid) ?? 0) + 1);
   }
 
-  async json(tournamentId: string) {
+  /** Classificação pronta pra servir; recalcula uma vez por versão, mesmo com mil pedidos juntos. */
+  async payload(tournamentId: string) {
+    const gen = this.gen.get(tournamentId) ?? 0;
     const c = this.cache.get(tournamentId);
-    if (c && !c.dirty) return c.json;
-    const data = await this.compute(tournamentId);
-    const out = { data, json: JSON.stringify(data), dirty: false };
-    this.cache.set(tournamentId, out);
-    return out.json;
+    if (c && c.gen === gen) return c.payload;
+    const payload = await this.building.run(`${tournamentId}:${gen}`, async () => new Payload(JSON.stringify(await this.compute(tournamentId))));
+    if ((this.gen.get(tournamentId) ?? 0) === gen) this.cache.set(tournamentId, { payload, gen });
+    return payload;
   }
 
   async compute(tournamentId: string): Promise<StandingsDTO> {
     const t = await this.prisma.tournament.findUnique({ where: { id: tournamentId } });
     if (!t) throw new NotFoundException('Torneio não encontrado.');
     const [matches, rules, placements, adjustments] = await Promise.all([
-      this.prisma.match.findMany({ where: { tournamentId, countsForStandings: true }, select: { summary: true, sportId: true, gender: true, group: true, homeId: true, awayId: true } }),
+      this.prisma.match.findMany({ where: { tournamentId, countsForStandings: true }, select: { id: true, sportId: true, gender: true, group: true, homeId: true, awayId: true } }),
       this.prisma.scoringRule.findMany({ where: { tournamentId } }),
       this.prisma.placement.findMany({ where: { tournamentId } }),
       this.prisma.pointAdjustment.findMany({ where: { tournamentId } }),
     ]);
+    const summaries = new Map((await Promise.all(matches.map((m) => this.live.summary(m.id).catch(() => null)))).filter((x): x is MatchSummary => !!x).map((x) => [x.id, x]));
 
     const ruleFor = (sportId: string, gender: string): Rule => {
       const r =
@@ -107,7 +120,7 @@ export class StandingsService {
     const tables = new Map<string, { sportId: string; gender: Gender; group: string | null; rows: Map<string, ModalityTableRow>; games: { h: string; a: string; s: MatchSummary }[]; rule: Rule }>();
 
     for (const m of matches) {
-      const s = json<MatchSummary | null>(m.summary, null);
+      const s = summaries.get(m.id);
       if (!s || s.status !== 'FINISHED') continue;
       const gender = m.gender as Gender;
       const rule = ruleFor(m.sportId, m.gender);

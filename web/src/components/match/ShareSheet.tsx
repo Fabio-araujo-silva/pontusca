@@ -2,7 +2,6 @@
 // como PNG. Duas opções de fundo (atlética 1 ou 2) e dois formatos (feed/story).
 import { Download, Share2 } from 'lucide-react';
 import { forwardRef, useEffect, useRef, useState } from 'react';
-import { toPng } from 'html-to-image';
 import type { InstitutionDTO, MatchDetail, SportDTO } from '@shared/types';
 import { usePublic } from '@/pages/public/PublicLayout';
 import { alpha, fmtScore, GENDER, longDate, mix, onColor } from '@/lib/format';
@@ -51,6 +50,8 @@ export function ShareSheet({ open, onClose, m, sport }: { open: boolean; onClose
     if (!ref.current) return null;
     await document.fonts.ready;
     const [W, H] = SIZE[format];
+    // carregada só quando alguém compartilha (fora do pacote inicial do site)
+    const { toPng } = await import('html-to-image');
     return toPng(ref.current, { width: W, height: H, pixelRatio: 1, cacheBust: true, style: { transform: 'none' } });
   };
 

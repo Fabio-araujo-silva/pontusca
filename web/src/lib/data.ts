@@ -66,25 +66,33 @@ function later(fn: () => void, spread: number) {
 export function useLiveSync() {
   const qc = useQueryClient();
   useRooms([SANDBOX ? 'feed:sandbox' : 'feed']);
-  useSocketEvent<{ summary: MatchSummary; highlight: Highlight | null }>('summary', ({ summary, highlight }) => {
+  // `tick` = só os campos que mudam num lance; o resto o card já tem do feed
+  useSocketEvent<{ t: Partial<MatchSummary> & Pick<MatchSummary, 'id' | 'tournamentId' | 'updatedAt' | 'status' | 'manual'>; h: Highlight | null }>('tick', ({ t, h: highlight }) => {
     let before: MatchSummary | undefined;
-    qc.setQueryData<MatchSummary[]>(['feed', summary.tournamentId], (list) => {
+    let summary: MatchSummary | undefined;
+    qc.setQueryData<MatchSummary[]>(['feed', t.tournamentId], (list) => {
       if (!list) return list;
-      const i = list.findIndex((m) => m.id === summary.id);
-      if (i < 0) return [...list, summary];
+      const i = list.findIndex((m) => m.id === t.id);
+      if (i < 0) return list; // jogo novo: vem completo no refetch abaixo
       before = list[i];
-      if (list[i].updatedAt > summary.updatedAt) return list;
+      if (list[i].updatedAt > t.updatedAt) return list;
       const next = list.slice();
-      next[i] = summary;
+      next[i] = summary = { ...list[i], ...t, live: { ...list[i].live, ...t.live } };
       return next;
     });
+    if (!before) {
+      later(() => qc.invalidateQueries({ queryKey: ['feed', t.tournamentId] }, { cancelRefetch: false }), 1500);
+      return;
+    }
+    if (!summary) return;
+    const m: MatchSummary = summary;
     // lance a lance: só quem está com o jogo aberto busca (query ativa); espalhado
     // no tempo pra milhares de torcedores não baterem no servidor no mesmo ms
-    later(() => qc.invalidateQueries({ queryKey: ['match', summary.id] }, { cancelRefetch: false }), 600);
+    later(() => qc.invalidateQueries({ queryKey: ['match', m.id] }, { cancelRefetch: false }), 600);
     // classificação só muda quando um jogo termina (ou deixa de estar terminado)
-    if (summary.status === 'FINISHED' || before?.status === 'FINISHED' || summary.manual !== before?.manual)
-      later(() => qc.invalidateQueries({ queryKey: ['standings', summary.tournamentId] }, { cancelRefetch: false }), 1500);
-    if (highlight) bus.dispatchEvent(new CustomEvent('hl', { detail: { summary, highlight } }));
+    if (m.status === 'FINISHED' || before?.status === 'FINISHED' || m.manual !== before?.manual)
+      later(() => qc.invalidateQueries({ queryKey: ['standings', m.tournamentId] }, { cancelRefetch: false }), 1500);
+    if (highlight) bus.dispatchEvent(new CustomEvent('hl', { detail: { summary: m, highlight } }));
   });
   useSocketEvent<{ tournamentId: string }>('feed:changed', ({ tournamentId }) => {
     later(() => qc.invalidateQueries({ queryKey: ['feed', tournamentId] }, { cancelRefetch: false }), 2500);

@@ -83,7 +83,7 @@ export default function MesaHome() {
   const boot = useBootstrap();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['mesa', 'matches'], queryFn: () => get<MesaListItem[]>('/mesa/matches'), refetchInterval: 60_000 });
-  useRooms(['feed', 'feed:sandbox', 'mesa']);
+  useRooms(['ops', 'ops:sandbox', 'mesa']);
   useSocketEvent<{ summary: MatchSummary }>('summary', ({ summary }) => {
     qc.setQueryData<MesaListItem[]>(['mesa', 'matches'], (list) => list?.map((it) => (it.summary.id === summary.id ? { ...it, summary } : it)));
   });

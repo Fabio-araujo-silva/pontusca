@@ -264,7 +264,8 @@ export class SandboxService implements OnApplicationBootstrap, OnModuleDestroy {
     if (this.busy) return;
     this.busy = true;
     try {
-      const rows = await this.prisma.match.findMany({ where: { isSandbox: true, status: { in: ['LIVE', 'SCHEDULED'] }, NOT: { notes: { contains: '#manual' } } }, select: { id: true, status: true, scheduledAt: true }, orderBy: { scheduledAt: 'asc' } });
+      // notes NULL precisa entrar explícito: no SQL, NOT (NULL LIKE ...) é NULL e excluía todo jogo sem observação
+      const rows = await this.prisma.match.findMany({ where: { isSandbox: true, status: { in: ['LIVE', 'SCHEDULED'] }, OR: [{ notes: null }, { NOT: { notes: { contains: '#manual' } } }] }, select: { id: true, status: true, scheduledAt: true }, orderBy: { scheduledAt: 'asc' } });
       const now = Date.now();
       const liveRows = rows.filter((r) => r.status === 'LIVE');
       for (const r of liveRows) if (chance(0.7)) await this.step(r.id);

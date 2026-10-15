@@ -3,6 +3,7 @@ import { log } from '../common/log';
 import { EventEmitter } from 'events';
 import type { Athlete, Match, MatchEvent, MatchParticipant, MatchPlayer, Sport } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { Payload } from '../common/payload';
 import { json } from '../common/util';
 import type { AuthUser } from '../auth/auth';
 import { buildEvent, EngineError, EngineInput, EngineOutput, ManualResult, runEngine } from '../shared/engine';
@@ -31,8 +32,12 @@ interface Entry {
   names: Record<string, string>;
   out: EngineOutput;
   summary: MatchSummary;
-  detailJson?: string;
+  detail?: Payload;
+  /** resumo como está no banco (sem updatedAt): não regrava o que não mudou */
+  savedKey?: string;
 }
+
+const summaryKey = (s: MatchSummary) => JSON.stringify({ ...s, updatedAt: 0 });
 
 const toEngineEvent = (e: MatchEvent): EngineEvent => ({
   id: e.id,
@@ -54,20 +59,30 @@ export class LiveService implements OnApplicationBootstrap {
   private log = new Logger('Live');
   private cache = new Map<string, Entry>();
   private locks = new Map<string, Promise<unknown>>();
+  // carga em andamento por jogo (pedidos simultâneos esperam a mesma) e versão:
+  // uma carga lenta que começou antes de um refresh não sobrescreve a mais nova
+  private loading = new Map<string, Promise<Entry>>();
+  private gen = new Map<string, number>();
 
   constructor(
     private prisma: PrismaService,
     private bus: LiveBus,
   ) {}
 
-  /** No boot recalcula o placar de todos os jogos (garante cache coerente com o motor atual). */
+  /**
+   * No boot recalcula só o que importa agora (ao vivo + perto de hoje): o resto
+   * carrega sob demanda. Subir rápido = menos tempo fora do ar num restart no meio do jogo.
+   */
   async onApplicationBootstrap() {
-    const ids = await this.prisma.match.findMany({ select: { id: true } });
-    for (const { id } of ids) {
-      const e = await this.load(id);
-      await this.persist(e);
+    const t0 = Date.now();
+    const ids = await this.prisma.match.findMany({
+      where: { OR: [{ status: 'LIVE' }, { scheduledAt: { gte: new Date(t0 - 36 * 3600_000), lte: new Date(t0 + 36 * 3600_000) } }] },
+      select: { id: true },
+    });
+    for (let i = 0; i < ids.length; i += 8) {
+      await Promise.all(ids.slice(i, i + 8).map(async ({ id }) => this.persist(await this.entry(id))));
     }
-    this.log.log(`${ids.length} jogos carregados no cache ao vivo`);
+    this.log.log(`${ids.length} jogos carregados no cache ao vivo (${Date.now() - t0} ms)`);
   }
 
   // ------------------------------------------------------------------ leitura
@@ -76,10 +91,10 @@ export class LiveService implements OnApplicationBootstrap {
     return (await this.entry(id)).summary;
   }
 
-  async detailJson(id: string) {
+  /** Lance a lance pronto pra servir (texto + gzip), refeito só quando o jogo muda. */
+  async detailPayload(id: string) {
     const e = await this.entry(id);
-    if (!e.detailJson) e.detailJson = JSON.stringify(this.detail(e));
-    return e.detailJson;
+    return (e.detail ??= new Payload(JSON.stringify(this.detail(e))));
   }
 
   async detailObj(id: string) {
@@ -153,8 +168,9 @@ export class LiveService implements OnApplicationBootstrap {
       if (row.clientId) e.byClientId.set(row.clientId, row.id);
       e.match.seq = seq;
       this.compute(e);
-      await this.persist(e);
+      // o lance já está no banco: avisa os torcedores antes de gravar o resumo (cache derivado)
       this.publish(e, e.out.highlight);
+      await this.persist(e);
       log.info('live.command', {
         match: id,
         seq,
@@ -181,8 +197,8 @@ export class LiveService implements OnApplicationBootstrap {
         await this.prisma.matchEvent.update({ where: { id: eventId }, data: { voided: true, voidedAt: new Date(), voidedById: user?.id ?? null } });
         e.events = e.events.filter((x) => x.id !== eventId);
         this.compute(e);
-        await this.persist(e);
         this.publish(e, null);
+        await this.persist(e);
         log.info('live.void', { match: id, eventId, type: row.type, seq: row.seq, score: `${e.summary.score.home}x${e.summary.score.away}` });
       }
       return { summary: e.summary };
@@ -206,8 +222,8 @@ export class LiveService implements OnApplicationBootstrap {
       await this.prisma.matchEvent.update({ where: { id: eventId }, data });
       Object.assign(ev, data);
       this.compute(e);
-      await this.persist(e);
       this.publish(e, null);
+      await this.persist(e);
       log.info('live.assign_athlete', { match: id, eventId, ...data });
       return { summary: e.summary, event: ev };
     });
@@ -216,10 +232,10 @@ export class LiveService implements OnApplicationBootstrap {
   /** Recarrega do banco depois de edição do admin (times, horário, escalação...). */
   async refresh(id: string, structural = false) {
     return this.lock(id, async () => {
-      this.cache.delete(id);
+      this.invalidate(id);
       const exists = await this.prisma.match.findUnique({ where: { id }, select: { id: true, tournamentId: true, isSandbox: true } });
       if (!exists) return null;
-      const e = await this.load(id);
+      const e = await this.entry(id);
       await this.persist(e);
       this.publish(e, null);
       if (structural) this.bus.emit('feed', { tournamentId: e.match.tournamentId, isSandbox: e.match.isSandbox });
@@ -227,14 +243,35 @@ export class LiveService implements OnApplicationBootstrap {
     });
   }
 
-  forget(id: string, tournamentId: string, isSandbox: boolean) {
+  /**
+   * Edição do admin que mexe nos lances/estado do jogo (zerar, resultado manual,
+   * apagar): roda na MESMA fila dos lances do mesário, então não cruza com um
+   * lance chegando no meio. Depois recarrega e publica.
+   */
+  async mutate<T>(id: string, fn: () => Promise<T>, structural = false) {
+    const out = await this.lock(id, async () => {
+      const r = await fn();
+      this.invalidate(id);
+      return r;
+    });
+    await this.refresh(id, structural);
+    return out;
+  }
+
+  private invalidate(id: string) {
     this.cache.delete(id);
+    this.loading.delete(id);
+    this.gen.set(id, (this.gen.get(id) ?? 0) + 1);
+  }
+
+  forget(id: string, tournamentId: string, isSandbox: boolean) {
+    this.invalidate(id);
     this.bus.emit('feed', { tournamentId, isSandbox });
     this.bus.emit('standings', tournamentId);
   }
 
   forgetMany(ids: string[]) {
-    for (const id of ids) this.cache.delete(id);
+    for (const id of ids) this.invalidate(id);
   }
 
   canOperate(user: AuthUser | null, m: Pick<Match, 'mesarioId' | 'backupMesarioId' | 'backupEnabled' | 'isSandbox'>) {
@@ -252,8 +289,24 @@ export class LiveService implements OnApplicationBootstrap {
     throw new ForbiddenException('Você não é o mesário deste jogo.');
   }
 
-  private async entry(id: string) {
-    return this.cache.get(id) ?? (await this.load(id));
+  private entry(id: string): Promise<Entry> {
+    const hit = this.cache.get(id);
+    if (hit) return Promise.resolve(hit);
+    let p = this.loading.get(id);
+    if (!p) {
+      const gen = this.gen.get(id) ?? 0;
+      p = this.load(id).then((e) => {
+        // só vira o cache se ninguém invalidou o jogo enquanto carregava
+        if ((this.gen.get(id) ?? 0) === gen) this.cache.set(id, e);
+        return e;
+      });
+      const q = p.finally(() => {
+        if (this.loading.get(id) === q) this.loading.delete(id);
+      });
+      this.loading.set(id, q);
+      p = q;
+    }
+    return p;
   }
 
   private async load(id: string): Promise<Entry> {
@@ -286,7 +339,13 @@ export class LiveService implements OnApplicationBootstrap {
       names,
     } as Entry;
     this.compute(e);
-    this.cache.set(id, e);
+    if (match.summary) {
+      try {
+        e.savedKey = summaryKey(JSON.parse(match.summary));
+      } catch {
+        /* resumo antigo inválido: regrava */
+      }
+    }
     return e;
   }
 
@@ -303,7 +362,7 @@ export class LiveService implements OnApplicationBootstrap {
   private compute(e: Entry) {
     const m = e.match;
     e.out = runEngine(this.input(e));
-    e.detailJson = undefined;
+    e.detail = undefined;
     const last = [...e.out.timeline].reverse().find((t) => !t.minor);
     const frozen = m.status === 'POSTPONED' || m.status === 'CANCELED';
     e.summary = {
@@ -363,10 +422,13 @@ export class LiveService implements OnApplicationBootstrap {
     const now = new Date();
     const startedAt = status === 'SCHEDULED' ? null : (m.startedAt ?? now);
     const finishedAt = status === 'FINISHED' ? (m.finishedAt ?? now) : null;
+    // updatedAt muda a cada cálculo: compara sem ele (senão regravava sempre)
+    const key = summaryKey(e.summary);
+    if (e.savedKey === key && m.status === status) return;
     const summaryJson = JSON.stringify(e.summary);
-    if (m.summary === summaryJson && m.status === status) return;
     await this.prisma.match.update({ where: { id: m.id }, data: { status, seq: m.seq, summary: summaryJson, startedAt, finishedAt } });
     Object.assign(m, { status, summary: summaryJson, startedAt, finishedAt });
+    e.savedKey = key;
   }
 
   private publish(e: Entry, highlight: Highlight | null) {

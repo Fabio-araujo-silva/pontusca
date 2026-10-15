@@ -28,7 +28,7 @@ export default function Matches() {
   const qc = useQueryClient();
   const key = ['admin', 'matches', tournamentId];
   const q = useQuery({ queryKey: key, queryFn: () => get<AdminMatchRow[]>(`/admin/matches?tournamentId=${tournamentId}`), enabled: !!tournamentId });
-  useRooms([tournament?.isSandbox ? 'feed:sandbox' : 'feed']);
+  useRooms([tournament?.isSandbox ? 'ops:sandbox' : 'ops']);
   useSocketEvent<{ summary: MatchSummary }>('summary', ({ summary }) => {
     qc.setQueryData<AdminMatchRow[]>(key, (rows) => rows?.map((r) => (r.summary.id === summary.id ? { ...r, summary } : r)));
   });

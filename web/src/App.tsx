@@ -5,8 +5,9 @@ import { RequireAuth } from './components/Login';
 import { Spinner } from './components/ui/primitives';
 import { ADMIN_PATH } from './lib/auth';
 
-const PublicLayout = lazy(() => import('./pages/public/PublicLayout'));
-const Home = lazy(() => import('./pages/public/Home'));
+// o site público é a porta de entrada: vem no pacote principal (sem esperar 2 downloads em série)
+import PublicLayout from './pages/public/PublicLayout';
+import Home from './pages/public/Home';
 const MatchPage = lazy(() => import('./pages/public/MatchPage'));
 const Standings = lazy(() => import('./pages/public/Standings'));
 const InstitutionPage = lazy(() => import('./pages/public/InstitutionPage'));

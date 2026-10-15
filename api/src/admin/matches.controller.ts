@@ -127,24 +127,49 @@ export class MatchesController {
     if (!cur) throw new NotFoundException('Jogo não encontrado.');
     const b = parse(MatchBody.partial(), body);
     const merged = { ...cur, ...b, scheduledAt: b.scheduledAt ?? cur.scheduledAt.toISOString() } as z.infer<typeof MatchBody>;
-    await this.validate(merged, b.participants);
+    // mesário só é revalidado se a escala mudou (antes, editar só o local falhava
+    // se o mesário escalado tinha perdido a modalidade ou sido desativado)
+    const staffChanged = (b.mesarioId !== undefined && b.mesarioId !== cur.mesarioId) || (b.backupMesarioId !== undefined && b.backupMesarioId !== cur.backupMesarioId);
+    await this.validate(merged, b.participants, staffChanged);
     const teamsChanged = (b.homeId !== undefined && b.homeId !== cur.homeId) || (b.awayId !== undefined && b.awayId !== cur.awayId);
-    if (teamsChanged && cur.seq > 0) throw new BadRequestException('Jogo já tem lances: não dá pra trocar as equipes. Zere o jogo antes.');
+    const sportChanged = (b.sportId !== undefined && b.sportId !== cur.sportId) || (b.gender !== undefined && b.gender !== cur.gender);
+    if ((teamsChanged || sportChanged) && cur.seq > 0)
+      throw new BadRequestException(`Jogo já tem lances: não dá pra trocar ${teamsChanged ? 'as equipes' : 'a modalidade/naipe'}. Zere o jogo antes.`);
     const { participants, ...data } = b;
-    await this.prisma.match.update({ where: { id }, data: { ...data, ...(b.scheduledAt && { scheduledAt: new Date(b.scheduledAt) }) } });
-    if (participants) await saveParticipants(this.prisma, id, participants);
-    if (teamsChanged) {
-      await this.prisma.matchPlayer.deleteMany({ where: { matchId: id } });
-      await this.importLineups(id);
-    }
+    // mudou de torneio: segue o ambiente dele (sandbox x real)
+    const isSandbox = b.tournamentId && b.tournamentId !== cur.tournamentId ? (await this.prisma.tournament.findUnique({ where: { id: b.tournamentId } }))!.isSandbox : undefined;
+    await this.live.mutate(
+      id,
+      async () => {
+        await this.prisma.match.update({
+          where: { id },
+          data: {
+            ...data,
+            ...(b.scheduledAt && { scheduledAt: new Date(b.scheduledAt) }),
+            ...(isSandbox !== undefined && { isSandbox }),
+            ...(b.backupMesarioId !== undefined && b.backupMesarioId !== cur.backupMesarioId && { backupEnabled: false }),
+          },
+        });
+        if (participants) await saveParticipants(this.prisma, id, participants);
+        if (teamsChanged || sportChanged) {
+          await this.prisma.matchPlayer.deleteMany({ where: { matchId: id } });
+          await this.importLineups(id);
+        }
+      },
+      true,
+    );
+    // o feed do torneio antigo também muda
+    if (b.tournamentId && b.tournamentId !== cur.tournamentId) this.bus.emit('feed', { tournamentId: cur.tournamentId, isSandbox: cur.isSandbox });
     this.bus.emit('staff', id);
-    return this.live.refresh(id, true);
+    return this.live.summary(id);
   }
 
   @Delete(':id')
   async remove(@Param('id') id: string) {
-    const m = await this.prisma.match.delete({ where: { id } });
+    // na fila do jogo: não apaga no meio de um lance chegando
+    const m = await this.live.mutate(id, () => this.prisma.match.delete({ where: { id } }));
     this.live.forget(id, m.tournamentId, m.isSandbox);
+    log.info('match.deleted', { match: id, tournament: m.tournamentId, seq: m.seq });
     return { ok: true };
   }
 
@@ -261,16 +286,14 @@ export class MatchesController {
   @Put(':id/result')
   async setResult(@Param('id') id: string, @Body() body: unknown) {
     const r = parse(ResultBody, body);
-    await this.prisma.match.update({ where: { id }, data: { manualResult: JSON.stringify(r), status: 'FINISHED' } });
-    await this.live.refresh(id);
+    await this.live.mutate(id, () => this.prisma.match.update({ where: { id }, data: { manualResult: JSON.stringify(r), status: 'FINISHED' } }));
     this.bus.emit('standings', (await this.live.raw(id)).tournamentId);
     return this.live.summary(id);
   }
 
   @Delete(':id/result')
   async clearResult(@Param('id') id: string) {
-    await this.prisma.match.update({ where: { id }, data: { manualResult: null, status: 'SCHEDULED' } });
-    await this.live.refresh(id);
+    await this.live.mutate(id, () => this.prisma.match.update({ where: { id }, data: { manualResult: null, status: 'SCHEDULED' } }));
     this.bus.emit('standings', (await this.live.raw(id)).tournamentId);
     return this.live.summary(id);
   }
@@ -278,11 +301,18 @@ export class MatchesController {
   /** Zera o jogo: apaga todos os lances e volta pra "agendado". */
   @Post(':id/reset')
   async reset(@Param('id') id: string) {
-    await this.prisma.$transaction([
-      this.prisma.matchEvent.deleteMany({ where: { matchId: id } }),
-      this.prisma.match.update({ where: { id }, data: { seq: 0, status: 'SCHEDULED', startedAt: null, finishedAt: null, manualResult: null } }),
-    ]);
-    return this.live.refresh(id, true);
+    // na fila do jogo: um lance que chega durante o "zerar" não sobra depois
+    await this.live.mutate(
+      id,
+      () =>
+        this.prisma.$transaction([
+          this.prisma.matchEvent.deleteMany({ where: { matchId: id } }),
+          this.prisma.match.update({ where: { id }, data: { seq: 0, status: 'SCHEDULED', startedAt: null, finishedAt: null, manualResult: null } }),
+        ]),
+      true,
+    );
+    log.info('match.reset', { match: id });
+    return this.live.summary(id);
   }
 
   /** Puxa o elenco cadastrado de cada atlética pra escalação do jogo (mantém o que já tem). */
@@ -290,6 +320,7 @@ export class MatchesController {
   async importLineupsRoute(@Param('id') id: string) {
     const n = await this.importLineups(id);
     await this.live.refresh(id);
+    this.bus.emit('staff', id); // console do mesário aberto recarrega a escalação
     return { imported: n };
   }
 
@@ -310,7 +341,7 @@ export class MatchesController {
     return n;
   }
 
-  private async validate(b: z.infer<typeof MatchBody>, participants?: unknown[]) {
+  private async validate(b: z.infer<typeof MatchBody>, participants?: unknown[], checkStaff = true) {
     const sport = await this.prisma.sport.findUnique({ where: { id: b.sportId } });
     if (!sport) throw new BadRequestException('Modalidade não encontrada.');
     const t = await this.prisma.tournament.findUnique({ where: { id: b.tournamentId } });
@@ -321,6 +352,9 @@ export class MatchesController {
       if (!b.homeId || !b.awayId) throw new BadRequestException('Escolha as duas atléticas.');
       if (b.homeId === b.awayId) throw new BadRequestException('Uma atlética não joga contra ela mesma.');
     }
+    const genders = sport.genders.split(',').filter(Boolean);
+    if (genders.length && !genders.includes(b.gender)) throw new BadRequestException(`${sport.name} não tem naipe ${b.gender === 'M' ? 'masculino' : b.gender === 'F' ? 'feminino' : 'misto'}.`);
+    if (!checkStaff) return void participants;
     if (b.mesarioId && b.mesarioId === b.backupMesarioId) throw new BadRequestException('Titular e reserva precisam ser pessoas diferentes.');
     for (const uid of [b.mesarioId, b.backupMesarioId]) {
       if (!uid) continue;

@@ -173,6 +173,7 @@ model Match {
   @@index([status])
   @@index([mesarioId])
   @@index([backupMesarioId])
+  @@index([isSandbox, status])
 }
 
 model MatchEvent {
@@ -195,7 +196,8 @@ model MatchEvent {
   match       Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
 
   @@unique([matchId, clientId])
-  @@index([matchId, seq])
+  // um número de lance por jogo (protege contra corrida de cache)
+  @@unique([matchId, seq])
 }
 
 model MatchPlayer {
@@ -221,6 +223,9 @@ model MatchParticipant {
   lane          Int?
   match         Match       @relation(fields: [matchId], references: [id], onDelete: Cascade)
   institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([institutionId])
 }
 
 // Quanto vale cada resultado no placar geral do torneio
@@ -270,4 +275,6 @@ model PointAdjustment {
   tournament    Tournament  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
   createdAt     DateTime    @default(now())
+
+  @@index([tournamentId])
 }

@@ -2,7 +2,8 @@
 // jogos ao vivo (com ações rápidas) e agenda de hoje.
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, Lock, LockOpen, MessageCircle, MonitorPlay, Phone, Radio, TriangleAlert, UserX, Users } from 'lucide-react';
-import { ReactNode, useMemo, useState } from 'react';
+import { ReactNode, useMemo, useRef, useState } from 'react';
+import type { MatchSummary } from '@shared/types';
 import { Link } from 'react-router-dom';
 import { cx, Empty, Spinner } from '@/components/ui/primitives';
 import { get, post } from '@/lib/api';
@@ -30,10 +31,32 @@ export default function Dashboard() {
   const sandbox = !!tournament?.isSandbox;
   const qc = useQueryClient();
   const key = ['admin', 'dashboard', sandbox];
+  // várias mudanças seguidas (simulador, escala em lote) = um recarregamento só
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const refetchSoon = () => {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => qc.invalidateQueries({ queryKey: key }), 400);
+  };
   const q = useQuery({ queryKey: key, queryFn: () => get<DashboardData>(`/admin/dashboard${sandbox ? '?sandbox=1' : ''}`), refetchInterval: 60_000 });
-  useRooms([sandbox ? 'feed:sandbox' : 'feed']);
-  useSocketEvent('summary', () => qc.invalidateQueries({ queryKey: key }));
-  useSocketEvent('feed:changed', () => qc.invalidateQueries({ queryKey: key }));
+  useRooms([sandbox ? 'ops:sandbox' : 'ops']);
+  // lance novo: remenda a linha do jogo; só recarrega o painel se o status mudou
+  // (muda alertas/seções). Antes recarregava tudo a cada lance.
+  useSocketEvent<{ summary: MatchSummary }>('summary', ({ summary }) => {
+    let moved = false;
+    qc.setQueryData<DashboardData>(key, (d) => {
+      if (!d) return d;
+      const patch = (rows: AdminMatchRow[]) =>
+        rows.map((r) => {
+          if (r.summary.id !== summary.id || r.summary.updatedAt > summary.updatedAt) return r;
+          if (r.summary.status !== summary.status) moved = true;
+          return { ...r, summary };
+        });
+      return { ...d, live: patch(d.live), today: patch(d.today) };
+    });
+    if (moved) refetchSoon();
+  });
+  useSocketEvent('feed:changed', () => refetchSoon());
+  useSocketEvent('staff:changed', () => refetchSoon());
 
   const backup = useAction((id: string, enabled: boolean) => post(`/admin/matches/${id}/backup`, { enabled }), {
     ok: (r: any) => (r.backupEnabled ? 'Reserva liberado para registrar' : 'Reserva bloqueado'),

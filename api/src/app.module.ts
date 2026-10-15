@@ -23,7 +23,19 @@ const WEB_DIST = [join(__dirname, '..', '..', 'web', 'dist'), join(__dirname, '.
   imports: [
     PrismaModule,
     AuthModule,
-    ...(WEB_DIST ? [ServeStaticModule.forRoot({ rootPath: WEB_DIST, exclude: ['/api/(.*)', '/socket.io/(.*)'], serveStaticOptions: { maxAge: '1h', index: false } })] : []),
+    ...(WEB_DIST
+      ? [
+          ServeStaticModule.forRoot({
+            rootPath: WEB_DIST,
+            exclude: ['/api/(.*)', '/socket.io/(.*)'],
+            serveStaticOptions: {
+              index: false,
+              // assets com hash no nome: cache eterno; index.html: sempre revalida (deploy novo chega na hora)
+              setHeaders: (res, path) => res.setHeader('Cache-Control', /[\\/]assets[\\/]/.test(path) ? 'public, max-age=31536000, immutable' : 'no-cache'),
+            },
+          }),
+        ]
+      : []),
   ],
   controllers: [
     PublicController,
