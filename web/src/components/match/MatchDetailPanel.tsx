@@ -465,7 +465,7 @@ function Info({ d, tournamentName, page }: { d: MatchDetail; tournamentName: str
       <InfoRow icon={<Clock3 className="h-4 w-4" />} text={timeHM(d.scheduledAt)} />
       {d.venue && <InfoRow icon={<MapPin className="h-4 w-4" />} text={d.venue} />}
       {tournamentName && <InfoRow icon={<Trophy className="h-4 w-4" />} text={[tournamentName.trim(), d.phase, d.group && `Grupo ${d.group}`].filter(Boolean).join(' · ')} />}
-      {d.notes && <p className="rounded-2xl bg-white/[0.04] p-3 text-[13px] text-white/75">{d.notes}</p>}
+      {d.notes && d.notes.replace('#manual', '').trim() && <p className="rounded-2xl bg-white/[0.04] p-3 text-[13px] text-white/75">{d.notes.replace('#manual', '').trim()}</p>}
       <div className="flex flex-wrap gap-2 pt-1">
         <Button size="sm" variant="outline" icon={<Link2 className="h-3.5 w-3.5" />} onClick={copy}>
           Copiar link

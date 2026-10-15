@@ -102,8 +102,14 @@ export class SandboxService implements OnApplicationBootstrap, OnModuleDestroy {
 
   // ---------------------------------------------------------------- geração
 
-  async generate(opts: { matches?: number; live?: number; finished?: number; sportIds?: string[] }) {
-    const total = Math.max(1, Math.min(80, opts.matches ?? 18));
+  /**
+   * fullDay: "dia cheio" — encerrados espalhados das 8h às 23h de um dia, os
+   * ao vivo começando agora e a agenda no dia seguinte; no fim distribui
+   * classificação final (medalhas) e uns ajustes de pontos.
+   * allTeams: usa as atléticas reais E as de teste juntas.
+   */
+  async generate(opts: { matches?: number; live?: number; finished?: number; sportIds?: string[]; fullDay?: boolean; allTeams?: boolean }) {
+    const total = Math.max(1, Math.min(120, opts.matches ?? 18));
     const liveN = Math.min(total, opts.live ?? 5);
     const finishedN = Math.min(total - liveN, opts.finished ?? 5);
     const now = Date.now();
@@ -124,13 +130,13 @@ export class SandboxService implements OnApplicationBootstrap, OnModuleDestroy {
     await this.prisma.scoringRule.create({ data: { tournamentId: t.id, placementPoints: '[13,10,8,6,4,2,1]', racePoints: '[9,7,6,5,4,3,2,1]' } });
 
     let insts = await this.prisma.institution.findMany({ where: { isSandbox: false } });
-    if (insts.length < 4) {
+    if (insts.length < 4 || opts.allTeams) {
       const existing = await this.prisma.institution.findMany({ where: { isSandbox: true } });
       for (const s of SANDBOX_TEAMS) {
         if (existing.some((e) => e.name === s.name)) continue;
         await this.prisma.institution.create({ data: { ...s, slug: `sb-${s.name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')}`, university: 'Universidade Sandbox', isSandbox: true } });
       }
-      insts = [...insts, ...(await this.prisma.institution.findMany({ where: { isSandbox: true } }))];
+      insts = [...insts.filter((i) => !i.isSandbox), ...(await this.prisma.institution.findMany({ where: { isSandbox: true } }))];
     }
 
     let sports = await this.prisma.sport.findMany({ where: { active: true, ...(opts.sportIds?.length && { id: { in: opts.sportIds } }) } });
@@ -150,8 +156,9 @@ export class SandboxService implements OnApplicationBootstrap, OnModuleDestroy {
       const cfg = json<SportConfig>(sport.config, { engine: 'SCORE', allowDraw: true, actions: [] });
       const gender = pick(sport.genders.split(','));
       const bucket = i < finishedN ? 'finished' : i < finishedN + liveN ? 'live' : 'future';
-      const scheduledAt =
-        bucket === 'finished'
+      const scheduledAt = opts.fullDay
+        ? fullDaySlot(bucket, i, finishedN, total - finishedN - liveN, now)
+        : bucket === 'finished'
           ? new Date(now - (i + 1) * 75 * 60_000)
           : bucket === 'live'
             ? new Date(now - rnd(30) * 60_000)
@@ -197,9 +204,42 @@ export class SandboxService implements OnApplicationBootstrap, OnModuleDestroy {
       if (i < finishedN) await this.fastForward(ids[i], Infinity);
       else if (i < finishedN + liveN) await this.fastForward(ids[i], 4 + rnd(25));
     }
+    if (opts.fullDay) await this.medals(t.id, insts.map((i) => i.id));
     this.bus.emit('feed', { tournamentId: t.id, isSandbox: true });
+    this.bus.emit('standings', t.id);
     this.bus.emit('catalog');
     return { tournamentId: t.id, created: ids.length };
+  }
+
+  /** Classificação final das modalidades com jogos encerrados + ajustes de pontos. */
+  private async medals(tournamentId: string, instIds: string[]) {
+    const done = await this.prisma.match.findMany({ where: { tournamentId, status: 'FINISHED' }, select: { sportId: true, gender: true, homeId: true, awayId: true, summary: true } });
+    const groups = new Map<string, { sportId: string; gender: string; score: Map<string, number> }>();
+    for (const m of done) {
+      const s = json<MatchSummary | null>(m.summary, null);
+      const k = `${m.sportId}|${m.gender}`;
+      const g = groups.get(k) ?? groups.set(k, { sportId: m.sportId, gender: m.gender, score: new Map() }).get(k)!;
+      const add = (id: string | null | undefined, v: number) => id && g.score.set(id, (g.score.get(id) ?? 0) + v);
+      if (s?.score.ranking) for (const r of s.score.ranking) add(r.institutionId, r.position ? 10 - r.position : 0);
+      else if (s) {
+        add(m.homeId, s.winner === 'home' ? 3 : s.winner === 'draw' ? 1 : 0);
+        add(m.awayId, s.winner === 'away' ? 3 : s.winner === 'draw' ? 1 : 0);
+      }
+    }
+    for (const g of groups.values()) {
+      // completa com outras atléticas pra dar pódio de 4 mesmo com poucos jogos
+      for (const id of shuffle(instIds)) if (g.score.size < 4 && !g.score.has(id)) g.score.set(id, -1 - Math.random());
+      const order = [...g.score.entries()].sort((a, b) => b[1] - a[1] + (Math.random() - 0.5) * 0.01).slice(0, 4);
+      await this.prisma.placement.createMany({ data: order.map(([institutionId], i) => ({ tournamentId, sportId: g.sportId, gender: g.gender, institutionId, position: i + 1 })) });
+    }
+    const [a, b, c] = shuffle(instIds);
+    await this.prisma.pointAdjustment.createMany({
+      data: [
+        { tournamentId, institutionId: a, points: 5, reason: 'Bônus de torcida (sandbox)' },
+        { tournamentId, institutionId: b, points: -3, reason: 'W.O. administrativo (sandbox)' },
+        { tournamentId, institutionId: c, points: 2, reason: 'Fair play (sandbox)' },
+      ],
+    });
   }
 
   async clear() {
@@ -224,7 +264,7 @@ export class SandboxService implements OnApplicationBootstrap, OnModuleDestroy {
     if (this.busy) return;
     this.busy = true;
     try {
-      const rows = await this.prisma.match.findMany({ where: { isSandbox: true, status: { in: ['LIVE', 'SCHEDULED'] } }, select: { id: true, status: true, scheduledAt: true }, orderBy: { scheduledAt: 'asc' } });
+      const rows = await this.prisma.match.findMany({ where: { isSandbox: true, status: { in: ['LIVE', 'SCHEDULED'] }, NOT: { notes: { contains: '#manual' } } }, select: { id: true, status: true, scheduledAt: true }, orderBy: { scheduledAt: 'asc' } });
       const now = Date.now();
       const liveRows = rows.filter((r) => r.status === 'LIVE');
       for (const r of liveRows) if (chance(0.7)) await this.step(r.id);
@@ -395,6 +435,33 @@ export class SandboxService implements OnApplicationBootstrap, OnModuleDestroy {
     });
     return out;
   }
+}
+
+/** Horários do "dia cheio" (fuso de São Paulo). */
+function fullDaySlot(bucket: string, i: number, finishedN: number, futureN: number, now: number) {
+  const sp = (ms: number) => new Date(new Date(ms).toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  const nowSp = sp(now);
+  const offset = now - nowSp.getTime(); // ms entre SP e o relógio local do servidor
+  const base = new Date(nowSp);
+  if (nowSp.getHours() < 10) base.setDate(base.getDate() - 1); // madrugada: o dia cheio é ontem
+  const at = (d: Date, h: number, min: number) => {
+    const x = new Date(d);
+    x.setHours(h, min, 0, 0);
+    return new Date(x.getTime() + offset);
+  };
+  if (bucket === 'live') return new Date(now - (5 + rnd(40)) * 60_000);
+  if (bucket === 'finished') {
+    const span = 15 * 60; // 8h -> 23h em minutos
+    const m = Math.floor((i / Math.max(1, finishedN)) * span);
+    const t = at(base, 8 + Math.floor(m / 60), Math.floor((m % 60) / 15) * 15);
+    return t.getTime() < now - 90 * 60_000 ? t : new Date(now - (100 + rnd(200)) * 60_000);
+  }
+  // agenda: o dia seguinte ao "dia cheio", das 8h às 22h
+  const next = new Date(base);
+  next.setDate(next.getDate() + 1);
+  const k = i % Math.max(1, futureN);
+  const m = Math.floor((k / Math.max(1, futureN)) * 14 * 60);
+  return at(next, 8 + Math.floor(m / 60), Math.floor((m % 60) / 15) * 15);
 }
 
 function personName() {

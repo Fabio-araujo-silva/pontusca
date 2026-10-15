@@ -5,10 +5,12 @@ import { parse } from '../common/util';
 import { SandboxService } from './sandbox.service';
 
 const GenerateBody = z.object({
-  matches: z.number().int().min(1).max(80).optional(),
+  matches: z.number().int().min(1).max(120).optional(),
   live: z.number().int().min(0).max(40).optional(),
   finished: z.number().int().min(0).max(40).optional(),
   sportIds: z.array(z.string()).optional(),
+  fullDay: z.boolean().optional(),
+  allTeams: z.boolean().optional(),
 });
 
 @Controller('api/admin/sandbox')
