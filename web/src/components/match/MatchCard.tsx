@@ -7,7 +7,9 @@ import type { Highlight, InstitutionDTO, MatchSummary } from '@shared/types';
 import { usePublic } from '@/pages/public/PublicLayout';
 import { onHighlight } from '@/lib/data';
 import { alpha, fmtScore, onColor, teamTone } from '@/lib/format';
-import { useFavorites, useNow } from '@/lib/hooks';
+import { useNow } from '@/lib/hooks';
+import { involves } from '@/lib/feed';
+import { useProfile } from '@/lib/profile';
 import { cx, LiveDot, ScoreNumber } from '../ui/primitives';
 import { SportIcon } from '../ui/SportIcon';
 import { TeamFlag } from '../ui/TeamFlag';
@@ -18,8 +20,8 @@ import { TimelineIcon } from './TimelineIcon';
 export const MatchCard = memo(function MatchCard({ m, expanded, onToggle }: { m: MatchSummary; expanded?: boolean; onToggle?: () => void }) {
   const { inst, sport } = usePublic();
   const sp = sport.get(m.sportId);
-  const { isFav } = useFavorites();
-  const fav = isFav(m.homeId) || isFav(m.awayId) || (m.participantIds ?? []).some((id) => isFav(id));
+  const { profile } = useProfile();
+  const fav = involves(m, profile.atleticaId);
   const flash = useCardFlash(m.id);
 
   return (

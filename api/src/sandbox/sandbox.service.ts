@@ -228,7 +228,12 @@ export class SandboxService implements OnApplicationBootstrap, OnModuleDestroy {
       // mantém o sandbox animado: se quase nada ao vivo, puxa o próximo agendado
       if (liveRows.length < 2 && chance(0.08)) {
         const nxt = rows.find((r) => r.status === 'SCHEDULED');
-        if (nxt) await this.step(nxt.id);
+        if (nxt) {
+          // antecipa o jogo pra agora (senão aparece "ao vivo" num dia futuro)
+          await this.prisma.match.update({ where: { id: nxt.id }, data: { scheduledAt: new Date() } });
+          await this.live.refresh(nxt.id, true);
+          await this.step(nxt.id);
+        }
       }
     } catch (e: any) {
       this.counters.errors++;

@@ -11,7 +11,7 @@ import { TeamFlag } from '@/components/ui/TeamFlag';
 import { get } from '@/lib/api';
 import { FALLBACK_INST } from '@/lib/data';
 import { fmtScore, GENDER, GENDER_SHORT, onColor, teamTone } from '@/lib/format';
-import { Chip } from './Home';
+import { Chip } from '@/components/ui/Chip';
 import { usePublic } from './PublicLayout';
 
 export default function Standings() {

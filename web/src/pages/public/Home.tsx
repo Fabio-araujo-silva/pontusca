@@ -1,377 +1,264 @@
-// Feed público: agenda por dia (ontem, hoje, amanhã...), ao vivo no topo e
-// filtros por atlética, modalidade, naipe, status, local e fase — todos na URL
-// pra dar pra compartilhar "só os jogos do CAASO".
-import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
-import { CalendarX2, Check, Search, SlidersHorizontal, Star, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import type { Gender, MatchSummary } from '@shared/types';
+// Feed público: um dia por tela. Arrasta pro lado troca o dia; abre já no
+// "jogo do momento" (ao vivo > último encerrado > primeiro do dia) via âncora
+// #jogo-<id>; botão flutuante volta pro jogo ao vivo.
+import { AnimatePresence, motion, PanInfo } from 'framer-motion';
+import { CalendarX2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { MatchSummary } from '@shared/types';
 import { MatchCard } from '@/components/match/MatchCard';
-import { Button, cx, Empty, LiveDot, Sheet } from '@/components/ui/primitives';
-import { SectionTag } from '@/components/ui/Ticker';
-import { SportIcon } from '@/components/ui/SportIcon';
+import { cx, Empty, LiveDot } from '@/components/ui/primitives';
 import { TeamFlag } from '@/components/ui/TeamFlag';
 import { useFeed } from '@/lib/data';
-import { addDays, dayChip, dayKey, GENDER } from '@/lib/format';
-import { useFavorites } from '@/lib/hooks';
+import { anchorId, byTime, feedDays, initialDay, involves, liveTarget, matchFromHash, momentMatch, openingPoint } from '@/lib/feed';
+import { dayChip, dayKey } from '@/lib/format';
+import { useProfile } from '@/lib/profile';
+import { SANDBOX } from '@/lib/sandbox';
 import { serverNow } from '@/lib/socket';
 import { usePublic } from './PublicLayout';
 
-type StatusFilter = 'live' | 'scheduled' | 'finished';
-
-const list = (v: string | null) => (v ? v.split(',').filter(Boolean) : []);
+const HEADER_OFFSET = SANDBOX ? 104 : 74; // cabeçalho fixo (+ faixa do sandbox)
 
 export default function Home() {
-  const { tournament, inst, sport, boot } = usePublic();
+  const { tournament, inst } = usePublic();
   const feed = useFeed(tournament?.id);
-  const [params, setParams] = useSearchParams();
-  const { favs, isFav } = useFavorites();
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [open, setOpen] = useState<string | null>(null);
+  const { profile } = useProfile();
+  const prefs = useMemo(() => ({ atleticaId: profile.atleticaId, sportIds: profile.sportIds }), [profile.atleticaId, profile.sportIds]);
+  const onlyMine = profile.onlyMine && !!profile.atleticaId;
+  const mine = profile.atleticaId ? inst.get(profile.atleticaId) : undefined;
 
   const today = dayKey(serverNow());
-  const matches = feed.data ?? [];
-
-  // ---- filtros (na URL) ----
-  const f = {
-    inst: list(params.get('atletica')),
-    sport: list(params.get('modalidade')),
-    g: list(params.get('naipe')) as Gender[],
-    st: list(params.get('status')) as StatusFilter[],
-    venue: params.get('local') ?? '',
-    phase: params.get('fase') ?? '',
-    fav: params.get('fav') === '1',
-    q: params.get('q') ?? '',
-  };
-  const slugToInst = useMemo(() => new Map(boot.institutions.map((i) => [i.slug, i])), [boot.institutions]);
-  const slugToSport = useMemo(() => new Map(boot.sports.map((s) => [s.slug, s])), [boot.sports]);
-  const setParam = (k: string, v: string | string[] | null) => {
-    const next = new URLSearchParams(params);
-    const val = Array.isArray(v) ? v.join(',') : v;
-    if (val) next.set(k, val);
-    else next.delete(k);
-    setParams(next, { replace: true });
-  };
-  const toggleIn = (k: string, cur: string[], v: string) => setParam(k, cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]);
-  const activeCount = f.inst.length + f.sport.length + f.g.length + f.st.length + (f.venue ? 1 : 0) + (f.phase ? 1 : 0) + (f.q ? 1 : 0);
-
-  const filtered = useMemo(() => {
-    const instIds = new Set(f.inst.map((s) => slugToInst.get(s)?.id).filter(Boolean) as string[]);
-    const sportIds = new Set(f.sport.map((s) => slugToSport.get(s)?.id).filter(Boolean) as string[]);
-    const q = f.q.trim().toLowerCase();
-    return matches.filter((m) => {
-      const ids = [m.homeId, m.awayId, ...(m.participantIds ?? [])].filter(Boolean) as string[];
-      if (instIds.size && !ids.some((id) => instIds.has(id))) return false;
-      if (f.fav && !ids.some((id) => favs.includes(id))) return false;
-      if (sportIds.size && !sportIds.has(m.sportId)) return false;
-      if (f.g.length && !f.g.includes(m.gender)) return false;
-      if (f.st.length) {
-        const k: StatusFilter = m.status === 'LIVE' ? 'live' : m.status === 'FINISHED' ? 'finished' : 'scheduled';
-        if (!f.st.includes(k)) return false;
-      }
-      if (f.venue && m.venue !== f.venue) return false;
-      if (f.phase && m.phase !== f.phase) return false;
-      if (q) {
-        const hay = [m.title, m.phase, m.venue, sport.get(m.sportId)?.name, ...ids.map((id) => inst.get(id)?.name), ...ids.map((id) => inst.get(id)?.university)].filter(Boolean).join(' ').toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
-  }, [matches, params, favs, slugToInst, slugToSport, inst, sport]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ---- dias ----
-  const days = useMemo(() => {
-    const set = new Set(matches.map((m) => dayKey(m.scheduledAt)));
-    if (tournament?.startsAt && tournament?.endsAt) {
-      let k = dayKey(tournament.startsAt);
-      const end = dayKey(tournament.endsAt);
-      for (let i = 0; i < 30 && k <= end; i++, k = addDays(k, 1)) set.add(k);
-    }
-    set.add(today);
-    return [...set].sort();
-  }, [matches, tournament, today]);
-  const perDay = useMemo(() => {
-    const map = new Map<string, { n: number; live: boolean }>();
-    for (const m of filtered) {
+  const all = feed.data ?? [];
+  const visible = useMemo(() => (onlyMine ? all.filter((m) => involves(m, profile.atleticaId)) : all), [all, onlyMine, profile.atleticaId]);
+  const days = useMemo(() => feedDays(all, tournament, today), [all, tournament, today]);
+  const byDay = useMemo(() => {
+    const map = new Map<string, MatchSummary[]>();
+    for (const m of visible) {
       const k = dayKey(m.scheduledAt);
-      const v = map.get(k) ?? { n: 0, live: false };
-      v.n++;
-      if (m.status === 'LIVE') v.live = true;
-      map.set(k, v);
+      (map.get(k) ?? map.set(k, []).get(k)!).push(m);
     }
+    for (const l of map.values()) l.sort(byTime);
     return map;
-  }, [filtered]);
+  }, [visible]);
 
-  const dParam = params.get('dia');
-  const defaultDay = useMemo(() => {
-    if (perDay.get(today)?.n) return today;
-    const next = days.find((d) => d > today && perDay.get(d)?.n);
-    const prev = [...days].reverse().find((d) => d < today && perDay.get(d)?.n);
-    return next ?? prev ?? today;
-  }, [days, perDay, today]);
-  const day = dParam && days.includes(dParam) ? dParam : defaultDay;
+  const [day, setDay] = useState<string | null>(null);
+  const [dir, setDir] = useState(0);
+  const [open, setOpen] = useState<string | null>(null);
+  const pending = useRef<{ id: string; smooth: boolean } | null>(null);
 
-  const live = filtered.filter((m) => m.status === 'LIVE');
-  const ofDay = filtered.filter((m) => dayKey(m.scheduledAt) === day && m.status !== 'LIVE');
-  const upcoming = ofDay.filter((m) => m.status === 'SCHEDULED');
-  const done = ofDay.filter((m) => m.status === 'FINISHED').sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt));
-  const off = ofDay.filter((m) => m.status === 'POSTPONED' || m.status === 'CANCELED');
-  const showLive = live.length > 0 && (day === today || live.some((m) => dayKey(m.scheduledAt) === day));
+  // primeira carga: âncora da URL (link compartilhado) ou jogo do momento
+  const ready = !feed.isLoading && !!feed.data;
+  const booted = useRef(false);
+  useEffect(() => {
+    if (!ready || booted.current) return;
+    booted.current = true;
+    const start = openingPoint(visible, days, today, prefs, matchFromHash(window.location.hash));
+    setDay(start.day);
+    if (start.matchId) pending.current = { id: start.matchId, smooth: false };
+  }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const venues = useMemo(() => [...new Set(matches.map((m) => m.venue).filter(Boolean) as string[])].sort(), [matches]);
-  const phases = useMemo(() => [...new Set(matches.map((m) => m.phase).filter(Boolean) as string[])], [matches]);
-  const sportsHere = useMemo(() => {
-    const ids = new Set(matches.map((m) => m.sportId));
-    return boot.sports.filter((s) => ids.has(s.id));
-  }, [matches, boot.sports]);
-  const instsHere = useMemo(() => {
-    const ids = new Set(matches.flatMap((m) => [m.homeId, m.awayId, ...(m.participantIds ?? [])]).filter(Boolean) as string[]);
-    return boot.institutions.filter((i) => ids.has(i.id));
-  }, [matches, boot.institutions]);
+  const current = day ?? initialDay(days, (k) => byDay.get(k)?.length ?? 0, today);
+  const list = byDay.get(current) ?? [];
+  const idx = days.indexOf(current);
+
+  const goTo = useCallback(
+    (d: string, focusId?: string | null, smooth = true) => {
+      setDir(d > current ? 1 : d < current ? -1 : 0);
+      setDay(d);
+      setOpen(null);
+      const target = focusId ?? momentMatch(byDay.get(d) ?? [], prefs)?.id ?? null;
+      pending.current = target ? { id: target, smooth } : null;
+      if (!target) window.scrollTo({ top: 0 });
+      history.replaceState(null, '', target ? `#${anchorId(target)}` : window.location.pathname + window.location.search);
+    },
+    [current, byDay, prefs],
+  );
+  const step = (n: number) => {
+    const d = days[idx + n];
+    if (d) goTo(d, null, false);
+  };
+
+  // rola até o card pedido; se trocou de dia, espera a página nova assentar
+  const lastDay = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const p = pending.current;
+    if (!p || !document.getElementById(anchorId(p.id))) return;
+    pending.current = null;
+    const changed = lastDay.current !== null && lastDay.current !== current;
+    lastDay.current = current;
+    const scroll = (behavior: ScrollBehavior) => {
+      const el = document.getElementById(anchorId(p.id));
+      if (!el) return;
+      const y = el.getBoundingClientRect().top + window.scrollY - HEADER_OFFSET;
+      window.scrollTo({ top: Math.max(0, y), behavior });
+    };
+    if (changed) setTimeout(() => scroll(p.smooth ? 'smooth' : 'auto'), 380);
+    else requestAnimationFrame(() => scroll(p.smooth ? 'smooth' : 'auto'));
+  });
+  useEffect(() => {
+    if (lastDay.current === null && day) lastDay.current = day;
+  }, [day]);
+
+  // link #jogo-… colado/compartilhado com o app já aberto
+  useEffect(() => {
+    const on = () => {
+      const id = matchFromHash(window.location.hash);
+      const m = id && all.find((x) => x.id === id);
+      if (m) goTo(dayKey(m.scheduledAt), m.id);
+    };
+    window.addEventListener('hashchange', on);
+    return () => window.removeEventListener('hashchange', on);
+  }, [all, goTo]);
+
+  // setas do teclado no desktop
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.closest('input,textarea,[role=dialog]')) return;
+      if (e.key === 'ArrowRight') step(1);
+      if (e.key === 'ArrowLeft') step(-1);
+    };
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  });
+
+  const onDragEnd = (_: unknown, info: PanInfo) => {
+    if (info.offset.x < -70 || info.velocity.x < -450) step(1);
+    else if (info.offset.x > 70 || info.velocity.x > 450) step(-1);
+  };
+
+  // botão flutuante: some se não tem jogo ao vivo ou se ele já está na tela
+  const live = liveTarget(visible, prefs);
+  const liveInView = useInView(live && dayKey(live.scheduledAt) === current ? anchorId(live.id) : null);
 
   if (!tournament) return <Empty icon={<CalendarX2 className="h-6 w-6" />} title="Nenhum torneio no ar">Assim que a organização publicar a tabela, os jogos aparecem aqui.</Empty>;
 
-  const toggle = (id: string) => setOpen((cur) => (cur === id ? null : id));
-  const section = (title: string, items: MatchSummary[], tone: Parameters<typeof SectionTag>[0]['tone'], tilt = 0) =>
-    items.length > 0 && (
-      <section className="mt-6">
-        <h2 className="mb-2.5 flex items-center gap-2">
-          <SectionTag tone={tone} tilt={tilt}>
-            {tone === 'live' && <span className="h-2 w-2 animate-pulse rounded-full bg-snow" />}
-            {title}
-          </SectionTag>
-          <span className="font-display text-[17px] text-mute-2">{items.length}</span>
-        </h2>
-        <div className="space-y-2.5">
-          {items.map((m) => (
-            <MatchCard key={m.id} m={m} expanded={open === m.id} onToggle={() => toggle(m.id)} />
-          ))}
-        </div>
-      </section>
-    );
+  const chip = dayChip(current, today);
+  const nextWithGames = days.slice(idx + 1).find((d) => byDay.get(d)?.length);
 
   return (
-    <div className="px-4">
-      <DateStrip days={days} today={today} day={day} perDay={perDay} onPick={(d) => setParam('dia', d === defaultDay ? null : d)} />
-
-      <div className="scroll-x -mx-4 mt-3 gap-2 px-4">
-        <Chip active={!activeCount && !f.fav} onClick={() => setParams(new URLSearchParams(dParam ? { dia: dParam } : {}), { replace: true })}>
-          Todos
-        </Chip>
-        <Chip active={f.st.length === 1 && f.st[0] === 'live'} onClick={() => setParam('status', f.st.length === 1 && f.st[0] === 'live' ? null : 'live')}>
-          <LiveDot /> Ao vivo
-        </Chip>
-        <Chip active={f.fav} onClick={() => setParam('fav', f.fav ? null : '1')}>
-          <Star className={cx('h-3.5 w-3.5', f.fav && 'fill-current')} /> Minhas atléticas
-        </Chip>
-        <Chip active={activeCount > 0} onClick={() => setFiltersOpen(true)}>
-          <SlidersHorizontal className="h-3.5 w-3.5" /> Filtros{activeCount ? ` · ${activeCount}` : ''}
-        </Chip>
-        {f.inst.map((s) => {
-          const i = slugToInst.get(s);
-          return i ? (
-            <Chip key={s} active onClick={() => toggleIn('atletica', f.inst, s)}>
-              <TeamFlag inst={i} size={16} /> {i.name} <X className="h-3 w-3" />
-            </Chip>
-          ) : null;
-        })}
-        {f.sport.map((s) => {
-          const sp = slugToSport.get(s);
-          return sp ? (
-            <Chip key={s} active onClick={() => toggleIn('modalidade', f.sport, s)}>
-              <SportIcon name={sp.icon} size={14} /> {sp.name} <X className="h-3 w-3" />
-            </Chip>
-          ) : null;
-        })}
+    <div className="overflow-x-hidden">
+      {/* cabeçalho do dia */}
+      <div className="flex items-center justify-between px-4 pb-1 pt-4">
+        <button onClick={() => step(-1)} disabled={idx <= 0} aria-label="Dia anterior" className="rounded-full p-2 text-mute transition hover:text-white disabled:opacity-0">
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+        <div className="text-center">
+          <AnimatePresence mode="popLayout" initial={false} custom={dir}>
+            <motion.div key={current} custom={dir} initial={{ y: 8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -8, opacity: 0 }} transition={{ duration: 0.18 }}>
+              <div className={cx('font-display text-[34px] uppercase leading-none', chip.diff === 0 && 'text-pop-orange')}>{chip.top}</div>
+              <div className="mt-1 text-[12px] font-semibold text-mute">
+                {chip.bottom} {list.length ? `· ${list.length} jogo${list.length > 1 ? 's' : ''}` : ''}
+              </div>
+            </motion.div>
+          </AnimatePresence>
+          <div className="mt-2 flex justify-center gap-1">
+            {days.map((d, i) =>
+              Math.abs(i - idx) <= 4 ? (
+                <button key={d} onClick={() => goTo(d, null, false)} aria-label={dayChip(d, today).top} className={cx('h-1.5 rounded-full transition-all', d === current ? 'w-5 bg-white' : byDay.get(d)?.length ? 'w-1.5 bg-white/30' : 'w-1.5 bg-white/10')} />
+              ) : null,
+            )}
+          </div>
+        </div>
+        <button onClick={() => step(1)} disabled={idx >= days.length - 1} aria-label="Próximo dia" className="rounded-full p-2 text-mute transition hover:text-white disabled:opacity-0">
+          <ChevronRight className="h-5 w-5" />
+        </button>
       </div>
 
-      {f.fav && !favs.length && <p className="mt-4 rounded-2xl bg-white/[0.04] p-3 text-[13px] text-mute">Você ainda não segue nenhuma atlética. Abra Filtros e toque na ★ das suas.</p>}
-
-      {feed.isLoading ? (
-        <div className="mt-5 space-y-2.5">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="skeleton h-[132px] rounded-[22px]" />
-          ))}
-        </div>
-      ) : (
-        <LayoutGroup>
-          {showLive && section('Ao vivo', live, 'live', -1.5)}
-          {section('Próximos', upcoming, 'orange', 1)}
-          {section('Encerrados', done, 'black', -1)}
-          {section('Adiados ou cancelados', off, 'purple')}
-          {!showLive && !ofDay.length && (
-            <Empty icon={<CalendarX2 className="h-6 w-6" />} title={activeCount || f.fav ? 'Nenhum jogo com esses filtros neste dia' : 'Sem jogos neste dia'}>
-              {(() => {
-                const nxt = days.find((d) => d > day && perDay.get(d)?.n);
-                return nxt ? (
-                  <button className="mt-2 font-semibold text-brand" onClick={() => setParam('dia', nxt)}>
-                    Ver {dayChip(nxt, today).top.toLowerCase()} ({dayChip(nxt, today).bottom})
+      {/* páginas: arrastar pros lados */}
+      <AnimatePresence mode="popLayout" initial={false} custom={dir}>
+        <motion.div
+          key={current}
+          custom={dir}
+          variants={{ enter: (d: number) => ({ x: d >= 0 ? '60%' : '-60%', opacity: 0 }), center: { x: 0, opacity: 1 }, exit: (d: number) => ({ x: d >= 0 ? '-60%' : '60%', opacity: 0 }) }}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={{ type: 'spring', stiffness: 360, damping: 36 }}
+          drag="x"
+          dragDirectionLock
+          dragConstraints={{ left: 0, right: 0 }}
+          dragElastic={0.22}
+          onDragEnd={onDragEnd}
+          className="min-h-[60vh] px-4 pb-10 pt-3"
+          style={{ touchAction: 'pan-y' }}
+        >
+          {feed.isLoading ? (
+            <div className="space-y-2.5">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="skeleton h-[132px] rounded-[18px]" />
+              ))}
+            </div>
+          ) : list.length ? (
+            <div className="space-y-2.5">
+              {list.map((m) => (
+                <div key={m.id} id={anchorId(m.id)} style={{ scrollMarginTop: HEADER_OFFSET }}>
+                  <MatchCard m={m} expanded={open === m.id} onToggle={() => setOpen(open === m.id ? null : m.id)} />
+                </div>
+              ))}
+              {/* fim do dia: espaço pra qualquer card (inclusive o último) poder ficar no topo */}
+              <div className="flex flex-col items-center justify-start pt-8 text-center" style={{ minHeight: 'calc(100dvh - 300px)' }}>
+                <span className="tag bg-coal text-pop-yellow">fim_do_dia</span>
+                {idx < days.length - 1 && (
+                  <button onClick={() => step(1)} className="mt-3 inline-flex items-center gap-1 text-[13px] font-semibold text-mute hover:text-white">
+                    Arraste pro lado ou toque pra ver {dayChip(days[idx + 1], today).top.toLowerCase()} <ChevronRight className="h-4 w-4" />
                   </button>
-                ) : null;
-              })()}
+                )}
+              </div>
+            </div>
+          ) : (
+            <Empty icon={onlyMine && mine ? <TeamFlag inst={mine} size={40} /> : <CalendarX2 className="h-6 w-6" />} title={onlyMine && mine ? `O ${mine.name} não joga ${chip.diff === 0 ? 'hoje' : 'nesse dia'}` : 'Sem jogos nesse dia'}>
+              {nextWithGames && (
+                <button className="mt-2 font-semibold text-white underline underline-offset-4" onClick={() => goTo(nextWithGames, null, false)}>
+                  Ir pro próximo dia com jogo
+                </button>
+              )}
+              <p className="mt-3 text-[12px] text-mute-2">Arraste pro lado pra navegar entre os dias</p>
             </Empty>
           )}
-        </LayoutGroup>
-      )}
+        </motion.div>
+      </AnimatePresence>
 
-      <Sheet
-        open={filtersOpen}
-        onClose={() => setFiltersOpen(false)}
-        title="Filtros"
-        footer={
-          <div className="flex gap-2">
-            <Button variant="ghost" className="flex-1" onClick={() => setParams(new URLSearchParams(dParam ? { dia: dParam } : {}), { replace: true })}>
-              Limpar
-            </Button>
-            <Button variant="primary" className="flex-1" onClick={() => setFiltersOpen(false)}>
-              Ver {filtered.length} jogo{filtered.length === 1 ? '' : 's'}
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-6">
-          <label className="relative block">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-mute" />
-            <input className="field pl-10" placeholder="Buscar atlética, local, prova…" value={f.q} onChange={(e) => setParam('q', e.target.value || null)} />
-          </label>
-
-          <FilterGroup title="Atléticas" hint="★ = seguir (aparece em Minhas atléticas)">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {instsHere.map((i) => (
-                <InstToggle key={i.id} name={i.name} sub={i.university} active={f.inst.includes(i.slug)} fav={isFav(i.id)} onClick={() => toggleIn('atletica', f.inst, i.slug)} instId={i.id} flag={<TeamFlag inst={i} size={28} />} />
-              ))}
-            </div>
-          </FilterGroup>
-
-          <FilterGroup title="Modalidade">
-            <div className="flex flex-wrap gap-2">
-              {sportsHere.map((s) => (
-                <Chip key={s.id} active={f.sport.includes(s.slug)} onClick={() => toggleIn('modalidade', f.sport, s.slug)}>
-                  <SportIcon name={s.icon} size={14} /> {s.name}
-                </Chip>
-              ))}
-            </div>
-          </FilterGroup>
-
-          <FilterGroup title="Naipe">
-            <div className="flex flex-wrap gap-2">
-              {(['M', 'F', 'X'] as Gender[]).map((g) => (
-                <Chip key={g} active={f.g.includes(g)} onClick={() => toggleIn('naipe', f.g, g)}>
-                  {GENDER[g]}
-                </Chip>
-              ))}
-            </div>
-          </FilterGroup>
-
-          <FilterGroup title="Situação">
-            <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  ['live', 'Ao vivo'],
-                  ['scheduled', 'Agendados'],
-                  ['finished', 'Encerrados'],
-                ] as [StatusFilter, string][]
-              ).map(([k, l]) => (
-                <Chip key={k} active={f.st.includes(k)} onClick={() => toggleIn('status', f.st, k)}>
-                  {l}
-                </Chip>
-              ))}
-            </div>
-          </FilterGroup>
-
-          {venues.length > 1 && (
-            <FilterGroup title="Local">
-              <div className="flex flex-wrap gap-2">
-                {venues.map((v) => (
-                  <Chip key={v} active={f.venue === v} onClick={() => setParam('local', f.venue === v ? null : v)}>
-                    {v}
-                  </Chip>
-                ))}
-              </div>
-            </FilterGroup>
-          )}
-
-          {phases.length > 1 && (
-            <FilterGroup title="Fase">
-              <div className="flex flex-wrap gap-2">
-                {phases.map((p) => (
-                  <Chip key={p} active={f.phase === p} onClick={() => setParam('fase', f.phase === p ? null : p)}>
-                    {p}
-                  </Chip>
-                ))}
-              </div>
-            </FilterGroup>
-          )}
-        </div>
-      </Sheet>
+      {/* volta pro jogo ao vivo */}
+      <AnimatePresence>
+        {live && !liveInView && (
+          <motion.a
+            href={`#${anchorId(live.id)}`}
+            onClick={(e) => {
+              e.preventDefault();
+              goTo(dayKey(live.scheduledAt), live.id);
+            }}
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0, opacity: 0 }}
+            whileTap={{ scale: 0.9 }}
+            aria-label="Ir pro jogo ao vivo"
+            title="Jogo ao vivo"
+            className="fixed bottom-[calc(88px+env(safe-area-inset-bottom))] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-coal text-snow shadow-glow sm:bottom-8 sm:right-[max(1rem,calc(50vw-380px+1rem))]"
+          >
+            <LiveDot className="scale-150" />
+          </motion.a>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-// ---------------------------------------------------------------- peças
-
-function DateStrip({ days, today, day, perDay, onPick }: { days: string[]; today: string; day: string; perDay: Map<string, { n: number; live: boolean }>; onPick: (d: string) => void }) {
-  const ref = useRef<HTMLDivElement>(null);
+/** true quando o elemento com esse id está pelo menos 40% visível. */
+function useInView(id: string | null) {
+  const [inView, setInView] = useState(false);
   useEffect(() => {
-    const el = ref.current?.querySelector<HTMLElement>(`[data-day="${day}"]`);
-    el?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
-  }, [day]);
-  return (
-    <div ref={ref} className="scroll-x -mx-4 mt-3 gap-1.5 px-4">
-      {days.map((d) => {
-        const c = dayChip(d, today);
-        const info = perDay.get(d);
-        const active = d === day;
-        return (
-          <button key={d} data-day={d} onClick={() => onPick(d)} className={cx('relative flex min-w-[64px] shrink-0 flex-col items-center rounded-2xl px-2.5 pb-2 pt-1.5 transition', active ? 'text-black' : 'text-white/80 hover:bg-white/[0.05]')}>
-            {active && <motion.span layoutId="day-pill" className="absolute inset-0 rounded-2xl bg-white" transition={{ type: 'spring', stiffness: 500, damping: 40 }} />}
-            <span className={cx('relative font-display text-[17px] uppercase leading-tight', !active && c.diff === 0 && 'text-pop-orange')}>{c.top}</span>
-            <span className={cx('relative text-[11px] font-medium', active ? 'text-black/60' : 'text-mute')}>{c.bottom}</span>
-            <span className="relative mt-1 h-1.5">
-              {info?.live ? <LiveDot className="scale-75" /> : info?.n ? <span className={cx('block h-1.5 w-1.5 rounded-full', active ? 'bg-black/50' : 'bg-white/40')} /> : null}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-export function Chip({ active, onClick, children }: { active?: boolean; onClick?: () => void; children: React.ReactNode }) {
-  return (
-    <button onClick={onClick} className={cx('inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-semibold ring-1 transition active:scale-95', active ? 'bg-white text-black ring-white' : 'bg-white/[0.04] text-white/85 ring-white/[0.08] hover:bg-white/[0.08]')}>
-      {children}
-    </button>
-  );
-}
-
-function FilterGroup({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="mb-2 flex items-baseline justify-between">
-        <p className="label mb-0">{title}</p>
-        {hint && <span className="text-[11px] text-mute-2">{hint}</span>}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function InstToggle({ name, sub, active, fav, onClick, instId, flag }: { name: string; sub?: string | null; active: boolean; fav: boolean; onClick: () => void; instId: string; flag: JSX.Element }) {
-  const { toggle } = useFavorites();
-  return (
-    <div className={cx('flex items-center gap-2 rounded-2xl p-2 ring-1 transition', active ? 'bg-white/[0.1] ring-white/40' : 'ring-white/[0.07] hover:bg-white/[0.04]')}>
-      <button onClick={onClick} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-        {flag}
-        <span className="min-w-0">
-          <span className="block truncate text-[13px] font-semibold">{name}</span>
-          {sub && <span className="block truncate text-[11px] text-mute">{sub}</span>}
-        </span>
-        <AnimatePresence>{active && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}><Check className="h-4 w-4 text-brand" /></motion.span>}</AnimatePresence>
-      </button>
-      <button onClick={() => toggle(instId)} aria-label={fav ? 'Deixar de seguir' : 'Seguir'} className="p-1">
-        <Star className={cx('h-4 w-4', fav ? 'fill-warn text-warn' : 'text-mute-2')} />
-      </button>
-    </div>
-  );
+    setInView(false);
+    if (!id) return;
+    let io: IntersectionObserver | null = null;
+    const t = setInterval(() => {
+      const el = document.getElementById(id);
+      if (!el || io) return;
+      io = new IntersectionObserver(([e]) => setInView(e.intersectionRatio >= 0.4), { threshold: [0, 0.4, 1] });
+      io.observe(el);
+    }, 250);
+    return () => {
+      clearInterval(t);
+      io?.disconnect();
+    };
+  }, [id]);
+  return inView;
 }

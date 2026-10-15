@@ -1,8 +1,10 @@
-# Arquibancada
+# PONTUSCA
+
+> Pasta/pacotes ainda chamam `arquibancada` (nome antigo do projeto).
 
 Placar ao vivo dos jogos universitários que não têm cobertura (TUSCA, InterUSP e afins). Tem três frentes:
 
-- **Público** (`/`): sem login. Mostra os jogos em cards no estilo Apple Sports, com placar e animação de gol ao vivo, lance a lance, escalações, agenda por dia, filtros, classificação geral e um print do placar pronto pra postar.
+- **Público** (`/`): sem login. No primeiro acesso pergunta a atlética e os esportes preferidos (fica no `localStorage`) e mostra um tutorial de 3 gestos. Mostra os jogos em cards no estilo Apple Sports, com placar e animação de gol ao vivo, lance a lance, escalações, agenda por dia, filtros, classificação geral e um print do placar pronto pra postar.
 - **Mesa** (`/mesa`): console do **mesário**, a pessoa que registra o placar na beira da quadra. Funciona otimista e offline.
 - **Bastidores** (`/bastidores`): painel admin escondido (não tem link em lugar nenhum do site público). O caminho muda com `VITE_ADMIN_PATH` no build.
 
@@ -69,6 +71,8 @@ npm run typecheck # api + web
 **Titular e reserva.** Cada jogo tem um mesário titular e um reserva. O reserva só registra quando o admin libera, na hora, em Visão geral ou Jogos. Mesários só podem ser escalados nas modalidades em que estão habilitados.
 
 **Tempo real.** O Socket.IO tem duas salas: `feed` (o resumo de todos os jogos, que alimenta os cards) e `match:<id>`. O feed público e o detalhe de cada jogo ficam serializados em memória, então os torcedores não fazem consulta ao banco. Medido localmente: **1000 conexões simultâneas recebendo 22 mil atualizações em 20 s, latência p99 de 114 ms**.
+
+**Feed por dia (home).** Uma tela por dia, sem filtros: arrastar pro lado troca o dia (setas do teclado no desktop). Abre fixado no jogo do momento (ao vivo de qualquer dia > último encerrado > primeiro do dia) via âncora `#jogo-<id>` — que também serve de link compartilhável. Botão redondo flutuante leva pro jogo ao vivo (some se não há jogo ou se ele já está na tela). Switch "Só <atlética>" no topo filtra pela atlética do torcedor. Regras em `web/src/lib/feed.ts`, testadas em `feed.test.ts` (Vitest).
 
 **Torneio do momento.** O público não escolhe torneio: vê só o que o admin marcou em Bastidores → Torneios → "Colocar no site" (um por ambiente, real e sandbox). Cada torneio pode ter um **banner** (upload ou URL, com link opcional) exibido no topo da Classificação. O modelo `web/public/banners/tusca-2026.svg` vem pronto.
 

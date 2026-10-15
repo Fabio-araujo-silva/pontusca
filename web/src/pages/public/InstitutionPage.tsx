@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, Star } from 'lucide-react';
+import { Star } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import type { StandingsDTO } from '@shared/types';
 import { MatchCard } from '@/components/match/MatchCard';
 import { Button, cx, Empty } from '@/components/ui/primitives';
@@ -9,7 +9,7 @@ import { FlagPatternShapes, TeamFlag } from '@/components/ui/TeamFlag';
 import { get } from '@/lib/api';
 import { useFeed } from '@/lib/data';
 import { alpha, fmtScore } from '@/lib/format';
-import { useFavorites } from '@/lib/hooks';
+import { useProfile } from '@/lib/profile';
 import { usePublic } from './PublicLayout';
 
 export default function InstitutionPage() {
@@ -17,7 +17,7 @@ export default function InstitutionPage() {
   const { boot, tournament } = usePublic();
   const inst = boot.institutions.find((i) => i.slug === slug);
   const feed = useFeed(tournament?.id);
-  const { isFav, toggle } = useFavorites();
+  const { profile, save } = useProfile();
   const [open, setOpen] = useState<string | null>(null);
   const standings = useQuery({
     queryKey: ['standings', tournament?.id],
@@ -32,7 +32,7 @@ export default function InstitutionPage() {
   const next = mine.filter((m) => m.status === 'SCHEDULED').slice(0, 4);
   const past = mine.filter((m) => m.status === 'FINISHED').reverse().slice(0, 6);
   const row = standings.data?.rows.find((r) => r.institutionId === inst.id);
-  const fav = isFav(inst.id);
+  const fav = profile.atleticaId === inst.id;
 
   return (
     <div>
@@ -49,14 +49,9 @@ export default function InstitutionPage() {
           </div>
         </div>
         <div className="relative mt-5 flex gap-2">
-          <Button size="sm" variant={fav ? 'primary' : 'soft'} icon={<Star className={cx('h-3.5 w-3.5', fav && 'fill-current')} />} onClick={() => toggle(inst.id)}>
-            {fav ? 'Seguindo' : 'Seguir'}
+          <Button size="sm" variant={fav ? 'primary' : 'soft'} icon={<Star className={cx('h-3.5 w-3.5', fav && 'fill-current')} />} onClick={() => save({ atleticaId: fav ? null : inst.id, onlyMine: fav ? false : profile.onlyMine })}>
+            {fav ? 'Minha atlética' : 'É a minha atlética'}
           </Button>
-          <Link to={`/?atletica=${inst.slug}`}>
-            <Button size="sm" variant="soft">
-              Todos os jogos <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
-          </Link>
         </div>
       </div>
 

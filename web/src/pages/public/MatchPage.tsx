@@ -19,7 +19,7 @@ export default function MatchPage() {
   useEffect(() => {
     if (!m) return;
     const sp = sport.get(m.sportId)?.name ?? 'Jogo';
-    if (m.score.ranking) document.title = `${sp} · ${m.title ?? ''} · Arquibancada`;
+    if (m.score.ranking) document.title = `${sp} · ${m.title ?? ''} · PONTUSCA`;
     else {
       const t = teamsOf(m, inst);
       document.title = `${t.home.name} ${fmtScore(m.score.home)} x ${fmtScore(m.score.away)} ${t.away.name} · ${sp}`;

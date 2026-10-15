@@ -227,7 +227,7 @@ const ShareArt = forwardRef<HTMLDivElement, ArtProps>(function ShareArt({ m, spo
         <div style={{ marginTop: 40, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 24, fontWeight: 600, opacity: 0.75 }}>
           <span>{[longDate(m.scheduledAt), m.venue].filter(Boolean).join(' · ')}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 12, fontFamily: "'Big Shoulders Display Variable', sans-serif", fontSize: 34, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', opacity: 1 }}>
-            <LogoMark size={44} /> Arquibancada
+            <LogoMark size={44} /> PONTUSCA
           </span>
         </div>
       </div>

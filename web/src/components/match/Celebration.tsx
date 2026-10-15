@@ -8,7 +8,8 @@ import type { Highlight, InstitutionDTO, MatchSummary } from '@shared/types';
 import { usePublic } from '@/pages/public/PublicLayout';
 import { onHighlight } from '@/lib/data';
 import { fmtScore, onColor, teamTone } from '@/lib/format';
-import { useFavorites } from '@/lib/hooks';
+import { involves } from '@/lib/feed';
+import { useProfile } from '@/lib/profile';
 import { TeamFlag } from '../ui/TeamFlag';
 import { teamsOf } from './helpers';
 
@@ -21,14 +22,14 @@ interface Shown {
 
 export function Celebration() {
   const { focused, inst } = usePublic();
-  const { favs } = useFavorites();
+  const { profile } = useProfile();
   const [shown, setShown] = useState<Shown | null>(null);
 
   useEffect(
     () =>
       onHighlight(({ summary, highlight }) => {
         if (!highlight.big) return;
-        const watching = summary.id === focused || [summary.homeId, summary.awayId, ...(summary.participantIds ?? [])].some((id) => id && favs.includes(id));
+        const watching = summary.id === focused || involves(summary, profile.atleticaId);
         if (!watching) return;
         const team = highlight.side ? teamsOf(summary, inst)[highlight.side] : null;
         setShown({ key: Date.now(), h: highlight, m: summary, team });
@@ -41,7 +42,7 @@ export function Celebration() {
         }
         if ('vibrate' in navigator) navigator.vibrate?.([30, 50, 30]);
       }),
-    [focused, favs, inst],
+    [focused, profile.atleticaId, inst],
   );
 
   useEffect(() => {

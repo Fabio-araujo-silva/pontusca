@@ -1,13 +1,16 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { CalendarDays, FlaskConical, Trophy, WifiOff, X } from 'lucide-react';
+import { CalendarDays, FlaskConical, Trophy, UserRound, WifiOff, X } from 'lucide-react';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import type { TournamentDTO } from '@shared/types';
 import { Celebration } from '@/components/match/Celebration';
+import { Onboarding, useSportsInPlay } from '@/components/Onboarding';
+import { TeamFlag } from '@/components/ui/TeamFlag';
 import { cx, Spinner } from '@/components/ui/primitives';
 import { Logo } from '@/components/ui/Logo';
 import { Ticker } from '@/components/ui/Ticker';
-import { Bootstrap, useBootstrap, useLiveSync } from '@/lib/data';
+import { Bootstrap, useBootstrap, useFeed, useLiveSync } from '@/lib/data';
+import { useProfile } from '@/lib/profile';
 import { exitSandbox, SANDBOX } from '@/lib/sandbox';
 import { useConnected } from '@/lib/socket';
 
@@ -32,9 +35,16 @@ export default function PublicLayout() {
   const [focused, setFocused] = useState<string | null>(null);
   // o torneio é definido pelo admin ("torneio do momento"); o público não escolhe
   const tournament = b.data?.tournaments[0] ?? null;
+  const { profile, save } = useProfile();
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  const feed = useFeed(tournament?.id);
+  const sportsInPlay = useSportsInPlay(b.data?.sports ?? [], [...new Set((feed.data ?? []).map((m) => m.sportId))]);
+  const institutionsInPlay = (b.data?.institutions ?? []).filter((i) => !i.isSandbox || SANDBOX);
+  const mine = profile.atleticaId ? b.inst.get(profile.atleticaId) : undefined;
+  const onHome = loc.pathname === '/';
 
   useEffect(() => {
-    if (tournament) document.title = `${tournament.name}${tournament.edition ? ' ' + tournament.edition : ''} · Arquibancada`;
+    if (tournament) document.title = `${tournament.name}${tournament.edition ? ' ' + tournament.edition : ''} · PONTUSCA`;
   }, [tournament]);
 
   if (b.isLoading || !b.data)
@@ -75,20 +85,30 @@ export default function PublicLayout() {
             <NavLink to="/" aria-label="Início">
               <Logo size={30} />
             </NavLink>
-            <nav className="hidden items-center gap-1 sm:flex">
-              <TopLink to="/" icon={<CalendarDays className="h-4 w-4" />} label="Jogos" end />
-              <TopLink to="/classificacao" icon={<Trophy className="h-4 w-4" />} label="Classificação" />
-            </nav>
-          </div>
-          {tournament && (
-            <div className="mt-2.5 flex items-center gap-2 text-[13px] font-semibold text-mute">
-              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: tournament.color ?? '#111114' }} />
-              <span className="truncate text-white">
-                {tournament.name} {tournament.edition}
-              </span>
-              {tournament.city && <span className="truncate">· {tournament.city}</span>}
+            <div className="flex items-center gap-1.5">
+              <nav className="hidden items-center gap-1 sm:flex">
+                <TopLink to="/" icon={<CalendarDays className="h-4 w-4" />} label="Jogos" end />
+                <TopLink to="/classificacao" icon={<Trophy className="h-4 w-4" />} label="Classificação" />
+              </nav>
+              {onHome && mine && (
+                <button
+                  role="switch"
+                  aria-checked={profile.onlyMine}
+                  onClick={() => save({ onlyMine: !profile.onlyMine })}
+                  title={profile.onlyMine ? 'Mostrando só os jogos da sua atlética' : 'Mostrar só os jogos da sua atlética'}
+                  className="flex items-center gap-1.5 rounded-full py-1 pl-2 pr-1 text-[12px] font-semibold text-mute transition hover:text-white"
+                >
+                  <span className={cx('transition-colors', profile.onlyMine && 'text-white')}>Só {mine.name}</span>
+                  <span className={cx('relative h-5 w-8 rounded-full transition-colors', profile.onlyMine ? 'bg-coal' : 'bg-white/[0.14]')}>
+                    <motion.span className="absolute top-0.5 h-4 w-4 rounded-full bg-snow shadow" animate={{ left: profile.onlyMine ? 14 : 2 }} transition={{ type: 'spring', stiffness: 600, damping: 34 }} />
+                  </span>
+                </button>
+              )}
+              <button onClick={() => setPrefsOpen(true)} aria-label="Minhas preferências" title="Minhas preferências" className="flex h-9 w-9 items-center justify-center rounded-full ring-1 ring-white/[0.1] transition hover:ring-white/30">
+                {mine ? <TeamFlag inst={mine} size={30} /> : <UserRound className="h-4 w-4 text-mute" />}
+              </button>
             </div>
-          )}
+          </div>
         </header>
 
         <AnimatePresence>
@@ -115,6 +135,11 @@ export default function PublicLayout() {
 
 
       <Celebration />
+      <AnimatePresence>
+        {(!profile.onboarded || prefsOpen) && (
+          <Onboarding key="onb" institutions={institutionsInPlay} sports={sportsInPlay} editing={profile.onboarded} onClose={() => setPrefsOpen(false)} />
+        )}
+      </AnimatePresence>
     </Ctx.Provider>
   );
 }
