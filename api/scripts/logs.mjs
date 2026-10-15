@@ -109,7 +109,7 @@ function summary(rows) {
   const norm = (s) => String(s ?? '').replace(/[a-z0-9]{20,}/gi, '<id>').replace(/\d+/g, 'N').slice(0, 140);
   const groups = new Map();
   for (const o of rows) {
-    const k = `${o.lvl}|${o.ev}|${norm(o.msg ?? o.err?.message ?? (o.status ? `${o.method} ${norm(o.path)} ${o.status}` : ''))}`;
+    const k = `${o.lvl}|${o.ev}|${norm(o.msg ?? o.reason ?? o.err?.message ?? (o.status ? `${o.method} ${norm(o.path)} ${o.status}` : ''))}`;
     const g = groups.get(k) ?? { n: 0, first: o.t, last: o.t, sample: o, users: new Set() };
     g.n++;
     g.last = o.t;

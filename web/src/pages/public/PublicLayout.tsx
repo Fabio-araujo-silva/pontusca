@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { CalendarDays, FlaskConical, Trophy, UserRound, WifiOff, X } from 'lucide-react';
-import { createContext, Dispatch, memo, SetStateAction, useContext, useEffect, useMemo, useState } from 'react';
+import { Context, createContext, Dispatch, memo, SetStateAction, useContext, useEffect, useMemo, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import type { InstitutionDTO, TournamentDTO } from '@shared/types';
 import { Celebration } from '@/components/match/Celebration';
@@ -28,7 +28,9 @@ interface PublicCtx {
   setCompactTitle: (t: string | null) => void;
 }
 
-const Ctx = createContext<PublicCtx>(null as any);
+// em dev, o HMR reexecuta este arquivo: reaproveita o mesmo contexto (senão usePublic() vira null)
+const Ctx: Context<PublicCtx> = import.meta.hot?.data.publicCtx ?? createContext<PublicCtx>(null as any);
+if (import.meta.hot) import.meta.hot.data.publicCtx = Ctx;
 export const usePublic = () => useContext(Ctx);
 
 export default function PublicLayout() {

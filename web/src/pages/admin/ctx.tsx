@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import type { InstitutionDTO, MatchSummary, Role, SportDTO, TournamentDTO } from '@shared/types';
 import { get } from '@/lib/api';
+import { useRooms, useSocketEvent } from '@/lib/socket';
 
 export type AdminTournament = TournamentDTO & { matches: number };
 export type AdminInstitution = InstitutionDTO & { athletes: number; matches: number };
@@ -51,6 +52,11 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const iq = useQuery({ queryKey: ['admin', 'institutions'], queryFn: () => get<AdminInstitution[]>('/admin/institutions') });
   const sq = useQuery({ queryKey: ['admin', 'sports'], queryFn: () => get<AdminSport[]>('/admin/sports') });
   const uq = useQuery({ queryKey: ['admin', 'users'], queryFn: () => get<AdminUser[]>('/admin/users') });
+  // outro admin mexeu no catálogo (atléticas, modalidades, torneios): atualiza aqui também
+  useRooms(['mesa']); // sala leve: só escala e catálogo
+  useSocketEvent('catalog:changed', () => {
+    for (const k of ['tournaments', 'institutions', 'sports']) void qc.invalidateQueries({ queryKey: ['admin', k] });
+  });
   const [tournamentId, setTid] = useState<string | null>(() => {
     try {
       return localStorage.getItem(KEY);
