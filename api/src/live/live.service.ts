@@ -119,7 +119,8 @@ export class LiveService implements OnApplicationBootstrap {
 
   // ------------------------------------------------------------------ escrita
 
-  async command(user: AuthUser | null, id: string, cmd: MatchCommand) {
+  /** `silent`: gerador do sandbox avançando jogos em massa (não publica nem grava o resumo a cada lance). */
+  async command(user: AuthUser | null, id: string, cmd: MatchCommand, opts: { silent?: boolean } = {}) {
     return this.lock(id, async () => {
       const e = await this.entry(id);
       this.assertCanOperate(user, e.match);
@@ -172,6 +173,7 @@ export class LiveService implements OnApplicationBootstrap {
       if (row.clientId) e.byClientId.set(row.clientId, row.id);
       e.match.seq = seq;
       this.compute(e);
+      if (opts.silent) return { summary: e.summary, event: ev, duplicate: false };
       // o lance já está no banco: avisa os torcedores antes de gravar o resumo (cache derivado)
       this.publish(e, e.out.highlight);
       await this.persist(e);

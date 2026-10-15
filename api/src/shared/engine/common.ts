@@ -141,13 +141,16 @@ export function mmss(ms: number) {
   return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
 }
 
+const MAX_STOPPAGE_MIN = 30;
+
 /** Texto do relógio: "67'", "45+2'", "08:34". */
 export function formatClock(clock: ClockView, now: number): string {
   const el = clockElapsed(clock, now);
   if (clock.display === 'minute') {
     const m = Math.floor(el / 60000) + 1;
     const dur = clock.durationMs != null ? Math.round(clock.durationMs / 60000) : null;
-    if (dur != null && m > dur) return `${clock.offsetMin + dur}+${m - dur}'`;
+    // acréscimo absurdo = tempo esquecido aberto pelo mesário: mostra só "45+'" (não "45+622'")
+    if (dur != null && m > dur) return m - dur > MAX_STOPPAGE_MIN ? `${clock.offsetMin + dur}+'` : `${clock.offsetMin + dur}+${m - dur}'`;
     return `${clock.offsetMin + m}'`;
   }
   if (clock.direction === 'down' && clock.durationMs != null) return mmss(clock.durationMs - el);

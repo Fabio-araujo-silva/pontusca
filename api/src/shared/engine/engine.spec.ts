@@ -80,6 +80,12 @@ describe('SCORE (futebol)', () => {
     const clock = { running: false, baseMs: 47 * 60000 + 5000, startedAt: null, direction: 'up' as const, durationMs: 45 * 60000, display: 'minute' as const, offsetMin: 45 };
     expect(formatClock(clock, 0)).toBe("90+3'");
   });
+
+  it('tempo esquecido aberto não mostra acréscimo absurdo', () => {
+    const clock = { running: false, baseMs: (45 + 622) * 60000, startedAt: null, direction: 'up' as const, durationMs: 45 * 60000, display: 'minute' as const, offsetMin: 45 };
+    expect(formatClock(clock, 0)).toBe("90+'");
+    expect(formatClock({ ...clock, baseMs: (45 + 29) * 60000 }, 0)).toBe("90+30'");
+  });
 });
 
 describe('SCORE (basquete/lutas/xadrez)', () => {

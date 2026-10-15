@@ -191,11 +191,22 @@ export class SandboxService implements OnApplicationBootstrap, OnModuleDestroy {
         const size = Math.max(2, Math.min(16, (cfg.lineup?.starters ?? 5) + (cfg.lineup?.starters && cfg.lineup.starters > 2 ? 4 : 0)));
         for (const [side, inst] of [['home', home], ['away', away]] as const) {
           const positions = cfg.lineup?.positions ?? [];
-          for (let k = 0; k < size; k++) {
-            const a = await this.prisma.athlete.create({ data: { institutionId: inst.id, name: personName(), nickname: chance(0.15) ? pick(NICKS) : null, isSandbox: true } });
-            const number = k + 1 + (k > 9 ? rnd(80) : 0);
-            await this.prisma.matchPlayer.create({ data: { matchId: id, athleteId: a.id, side, number, starter: k < (cfg.lineup?.starters ?? size), captain: k === 0, position: positions.length ? positions[Math.min(k, positions.length - 1)] : null } });
-          }
+          // em lote (antes: 2 inserts por atleta, ~1.800 em série no "dia cheio")
+          const created = await this.prisma.athlete.createManyAndReturn({
+            data: Array.from({ length: size }, () => ({ institutionId: inst.id, name: personName(), nickname: chance(0.15) ? pick(NICKS) : null, isSandbox: true })),
+            select: { id: true },
+          });
+          await this.prisma.matchPlayer.createMany({
+            data: created.map((a, k) => ({
+              matchId: id,
+              athleteId: a.id,
+              side,
+              number: k + 1 + (k > 9 ? rnd(80) : 0),
+              starter: k < (cfg.lineup?.starters ?? size),
+              captain: k === 0,
+              position: positions.length ? positions[Math.min(k, positions.length - 1)] : null,
+            })),
+          });
         }
       }
       ids.push(id);
@@ -300,7 +311,7 @@ export class SandboxService implements OnApplicationBootstrap, OnModuleDestroy {
     const cmds = this.next(s, cfg, detail, raw.sport, offline);
     for (const c of cmds) {
       try {
-        await this.live.command(null, id, { clientId: `sim-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, ...c } as MatchCommand);
+        await this.live.command(null, id, { clientId: `sim-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, ...c } as MatchCommand, { silent: offline });
         this.counters.commands++;
       } catch (e: any) {
         this.counters.errors++;
@@ -311,8 +322,10 @@ export class SandboxService implements OnApplicationBootstrap, OnModuleDestroy {
     return true;
   }
 
+  /** Avança o jogo "nos bastidores": sem transmitir cada lance; publica uma vez no fim. */
   private async fastForward(id: string, steps: number) {
     for (let i = 0; i < Math.min(steps, 3000); i++) if (!(await this.step(id, true))) break;
+    await this.live.refresh(id);
   }
 
   private next(s: MatchSummary, cfg: SportConfig, d: MatchDetail, sport: Sport, offline: boolean): Partial<MatchCommand>[] {
