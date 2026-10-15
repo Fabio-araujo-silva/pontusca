@@ -106,3 +106,17 @@
     @apply animate-shimmer rounded-xl;
   }
 }
+
+/* a barra de rolagem não some/volta quando abre um modal (a página não "pula" de lado) */
+html {
+  scrollbar-gutter: stable;
+}
+
+/* "reduzir movimento" do sistema: sem letreiro correndo nem pulsos */
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee,
+  .animate-ping2,
+  .animate-shimmer {
+    animation: none !important;
+  }
+}

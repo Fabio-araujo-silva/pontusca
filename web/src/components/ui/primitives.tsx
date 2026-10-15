@@ -1,9 +1,12 @@
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { Loader2, X } from 'lucide-react';
-import { ButtonHTMLAttributes, forwardRef, ReactNode, useEffect, useRef, useState } from 'react';
+import { ButtonHTMLAttributes, forwardRef, ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { fmtScore } from '@/lib/format';
 import { vibrate } from '@/lib/hooks';
+
+// curva padrão do app: entra firme e assenta, sem quique
+export const EASE = [0.16, 1, 0.3, 1] as const;
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -63,19 +66,23 @@ export function Empty({ icon, title, children }: { icon?: ReactNode; title: stri
 // ---------------------------------------------------------------- abas segmentadas
 
 export function Segmented<T extends string>({ value, onChange, options, className, size = 'md' }: { value: T; onChange: (v: T) => void; options: { value: T; label: ReactNode }[]; className?: string; size?: 'sm' | 'md' }) {
+  // id próprio: a "pílula" não voa entre dois Segmented iguais na tela (ex.: dois cards abertos)
+  const gid = useId();
   return (
-    <div className={cx('relative inline-flex rounded-full bg-white/[0.06] p-1', className)}>
-      {options.map((o) => (
-        <button
-          key={o.value}
-          onClick={() => onChange(o.value)}
-          className={cx('relative z-10 flex-1 whitespace-nowrap rounded-full font-semibold transition-colors', size === 'sm' ? 'px-3 py-1 text-[12px]' : 'px-4 py-1.5 text-[13px]', value === o.value ? 'text-black' : 'text-white/70 hover:text-white')}
-        >
-          {value === o.value && <motion.span layoutId={`seg-${options.map((x) => x.value).join('')}`} className="absolute inset-0 -z-10 rounded-full bg-white" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
-          {o.label}
-        </button>
-      ))}
-    </div>
+    <LayoutGroup id={gid}>
+      <div className={cx('relative inline-flex rounded-full bg-white/[0.06] p-1', className)}>
+        {options.map((o) => (
+          <button
+            key={o.value}
+            onClick={() => onChange(o.value)}
+            className={cx('relative z-10 flex-1 whitespace-nowrap rounded-full font-semibold transition-colors', size === 'sm' ? 'px-3 py-1 text-[12px]' : 'px-4 py-1.5 text-[13px]', value === o.value ? 'text-black' : 'text-white/70 hover:text-white')}
+          >
+            {value === o.value && <motion.span layoutId="seg-pill" className="absolute inset-0 -z-10 rounded-full bg-white" transition={{ duration: 0.25, ease: EASE }} />}
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </LayoutGroup>
   );
 }
 
@@ -107,10 +114,10 @@ export function ScoreNumber({ value, className = '', dim }: { value: number; cla
       <AnimatePresence mode="popLayout" initial={false}>
         <motion.span
           key={text}
-          initial={{ y: '90%', opacity: 0, filter: 'blur(4px)' }}
-          animate={{ y: '0%', opacity: 1, filter: 'blur(0px)' }}
-          exit={{ y: '-90%', opacity: 0, filter: 'blur(4px)' }}
-          transition={{ type: 'spring', stiffness: 420, damping: 30 }}
+          initial={{ y: '90%', opacity: 0 }}
+          animate={{ y: '0%', opacity: 1 }}
+          exit={{ y: '-90%', opacity: 0 }}
+          transition={{ duration: 0.3, ease: EASE }}
           className="inline-block"
         >
           {text}
@@ -139,9 +146,11 @@ export function Sheet({
   wide?: boolean;
   tone?: string; // cor de destaque no topo (cor da atlética)
 }) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     if (!open) return;
-    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && closeRef.current();
     window.addEventListener('keydown', k);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -149,7 +158,7 @@ export function Sheet({
       window.removeEventListener('keydown', k);
       document.body.style.overflow = prev;
     };
-  }, [open, onClose]);
+  }, [open]);
 
   return createPortal(
     <AnimatePresence>
@@ -162,7 +171,7 @@ export function Sheet({
             initial={{ y: 40, opacity: 0, scale: 0.98 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 40, opacity: 0, scale: 0.98 }}
-            transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+            transition={{ duration: 0.3, ease: EASE }}
             className={cx('relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[24px] bg-ink-850 shadow-glow ring-1 ring-white/[0.06] sm:rounded-[24px]', wide ? 'sm:max-w-3xl' : 'sm:max-w-lg')}
           >
             {tone && <div className="absolute inset-x-0 top-0 h-1" style={{ background: tone }} />}

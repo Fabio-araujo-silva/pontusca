@@ -6,7 +6,7 @@ import { CalendarX2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { MatchSummary } from '@shared/types';
 import { MatchCard } from '@/components/match/MatchCard';
-import { cx, Empty, LiveDot } from '@/components/ui/primitives';
+import { cx, EASE, Empty, LiveDot } from '@/components/ui/primitives';
 import { TeamFlag } from '@/components/ui/TeamFlag';
 import { useFeed } from '@/lib/data';
 import { anchorId, byTime, feedDays, initialDay, involves, liveTarget, matchFromHash, momentMatch, openingPoint } from '@/lib/feed';
@@ -16,7 +16,9 @@ import { SANDBOX } from '@/lib/sandbox';
 import { serverNow } from '@/lib/socket';
 import { usePublic } from './PublicLayout';
 
-const HEADER_OFFSET = SANDBOX ? 104 : 74; // cabeçalho fixo (+ faixa do sandbox)
+const HEADER_OFFSET = SANDBOX ? 100 : 70; // cabeçalho fixo (+ faixa do sandbox)
+
+type Pending = { id: string; smooth: boolean } | { top: true };
 
 export default function Home() {
   const { tournament, inst, setCompactTitle } = usePublic();
@@ -27,7 +29,7 @@ export default function Home() {
   const mine = profile.atleticaId ? inst.get(profile.atleticaId) : undefined;
 
   const today = dayKey(serverNow());
-  const all = feed.data ?? [];
+  const all = useMemo(() => feed.data ?? [], [feed.data]);
   const visible = useMemo(() => (onlyMine ? all.filter((m) => involves(m, profile.atleticaId)) : all), [all, onlyMine, profile.atleticaId]);
   const days = useMemo(() => feedDays(all, tournament, today), [all, tournament, today]);
   const byDay = useMemo(() => {
@@ -43,31 +45,34 @@ export default function Home() {
   const [day, setDay] = useState<string | null>(null);
   const [dir, setDir] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
-  const pending = useRef<{ id: string; smooth: boolean } | null>(null);
+  const pending = useRef<Pending | null>(null);
+  const dayChanged = useRef(false);
 
-  // primeira carga: âncora da URL (link compartilhado) ou jogo do momento
+  // primeira carga: âncora da URL (link compartilhado) ou jogo do momento,
+  // calculado ANTES de pintar (antes pintava hoje e depois deslizava pro dia certo)
   const ready = !feed.isLoading && !!feed.data;
+  const boot = useMemo(
+    () => (ready ? openingPoint(visible, days, today, prefs, matchFromHash(window.location.hash)) : null),
+    [ready], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const booted = useRef(false);
-  useEffect(() => {
-    if (!ready || booted.current) return;
+  if (boot && !booted.current) {
     booted.current = true;
-    const start = openingPoint(visible, days, today, prefs, matchFromHash(window.location.hash));
-    setDay(start.day);
-    if (start.matchId) pending.current = { id: start.matchId, smooth: false };
-  }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (boot.matchId) pending.current = { id: boot.matchId, smooth: false };
+  }
 
-  const current = day ?? initialDay(days, (k) => byDay.get(k)?.length ?? 0, today);
+  const current = day ?? boot?.day ?? initialDay(days, (k) => byDay.get(k)?.length ?? 0, today);
   const list = byDay.get(current) ?? [];
   const idx = days.indexOf(current);
 
   const goTo = useCallback(
     (d: string, focusId?: string | null, smooth = true) => {
+      dayChanged.current = d !== current;
       setDir(d > current ? 1 : d < current ? -1 : 0);
       setDay(d);
       setOpen(null);
       const target = focusId ?? momentMatch(byDay.get(d) ?? [], prefs)?.id ?? null;
-      pending.current = target ? { id: target, smooth } : null;
-      if (!target) window.scrollTo({ top: 0 });
+      pending.current = target ? { id: target, smooth } : { top: true };
       history.replaceState(null, '', target ? `#${anchorId(target)}` : window.location.pathname + window.location.search);
     },
     [current, byDay, prefs],
@@ -77,26 +82,31 @@ export default function Home() {
     if (d) goTo(d, null, false);
   };
 
-  // rola até o card pedido; se trocou de dia, espera a página nova assentar
-  const lastDay = useRef<string | null>(null);
+  // rola uma vez, antes da pintura: a página nova já aparece no lugar certo
   useLayoutEffect(() => {
     const p = pending.current;
-    if (!p || !document.getElementById(anchorId(p.id))) return;
+    if (!p) return;
+    if ('top' in p) {
+      pending.current = null;
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      return;
+    }
+    const el = document.getElementById(anchorId(p.id));
+    if (!el) return;
     pending.current = null;
-    const changed = lastDay.current !== null && lastDay.current !== current;
-    lastDay.current = current;
-    const scroll = (behavior: ScrollBehavior) => {
-      const el = document.getElementById(anchorId(p.id));
-      if (!el) return;
-      const y = el.getBoundingClientRect().top + window.scrollY - HEADER_OFFSET;
-      window.scrollTo({ top: Math.max(0, y), behavior });
-    };
-    if (changed) setTimeout(() => scroll(p.smooth ? 'smooth' : 'auto'), 380);
-    else requestAnimationFrame(() => scroll(p.smooth ? 'smooth' : 'auto'));
+    const y = Math.max(0, el.getBoundingClientRect().top + window.scrollY - HEADER_OFFSET);
+    window.scrollTo({ top: y, behavior: !dayChanged.current && p.smooth ? 'smooth' : 'instant' });
+    dayChanged.current = false;
   });
-  useEffect(() => {
-    if (lastDay.current === null && day) lastDay.current = day;
-  }, [day]);
+
+  // abrir outro card com um aberto acima: o fechamento do de cima não pode
+  // arrastar o novo pra fora da tela (Safari não tem scroll anchoring)
+  const toggle = useCallback((id: string) => {
+    setOpen((cur) => {
+      if (cur && cur !== id) keepInPlace(id);
+      return cur === id ? null : id;
+    });
+  }, []);
 
   // link #jogo-… colado/compartilhado com o app já aberto
   useEffect(() => {
@@ -119,7 +129,7 @@ export default function Home() {
   // setas do teclado no desktop
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.closest('input,textarea,[role=dialog]')) return;
+      if ((e.target as HTMLElement)?.closest?.('input,textarea,[role=dialog]')) return;
       if (e.key === 'ArrowRight') step(1);
       if (e.key === 'ArrowLeft') step(-1);
     };
@@ -127,7 +137,11 @@ export default function Home() {
     return () => window.removeEventListener('keydown', on);
   });
 
+  // arraste: só troca de dia se o gesto travou no eixo X (rolagem rápida na
+  // diagonal não pode mudar o dia sem querer)
+  const axis = useRef<'x' | 'y' | null>(null);
   const onDragEnd = (_: unknown, info: PanInfo) => {
+    if (axis.current !== 'x' || Math.abs(info.offset.x) < 24) return;
     if (info.offset.x < -70 || info.velocity.x < -450) step(1);
     else if (info.offset.x > 70 || info.velocity.x > 450) step(-1);
   };
@@ -142,13 +156,14 @@ export default function Home() {
   const nextWithGames = days.slice(idx + 1).find((d) => byDay.get(d)?.length);
 
   return (
-    <div className="overflow-x-hidden">
+    // overflow-x-clip + relative: a página que sai (position absolute) fica presa aqui
+    <div className="relative overflow-x-clip">
       {/* cabeçalho do dia */}
       <div className="flex items-center justify-between px-4 pb-1 pt-4">
-        <button onClick={() => step(-1)} disabled={idx <= 0} aria-label="Dia anterior" className="rounded-full p-2 text-mute transition hover:text-white disabled:opacity-0">
+        <button onClick={() => step(-1)} disabled={idx <= 0} aria-label="Dia anterior" className="rounded-full p-2 text-mute transition-colors hover:text-white disabled:opacity-0">
           <ChevronLeft className="h-5 w-5" />
         </button>
-        <div className="text-center">
+        <div className="relative text-center">
           <AnimatePresence mode="popLayout" initial={false} custom={dir}>
             <motion.div key={current} custom={dir} initial={{ y: 8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -8, opacity: 0 }} transition={{ duration: 0.18 }}>
               <div className={cx('font-display text-[34px] uppercase leading-none', chip.diff === 0 && 'text-pop-orange')}>{chip.top}</div>
@@ -160,12 +175,17 @@ export default function Home() {
           <div className="mt-2 flex justify-center gap-1">
             {days.map((d, i) =>
               Math.abs(i - idx) <= 4 ? (
-                <button key={d} onClick={() => goTo(d, null, false)} aria-label={dayChip(d, today).top} className={cx('h-1.5 rounded-full transition-all', d === current ? 'w-5 bg-white' : byDay.get(d)?.length ? 'w-1.5 bg-white/30' : 'w-1.5 bg-white/10')} />
+                <button
+                  key={d}
+                  onClick={() => goTo(d, null, false)}
+                  aria-label={dayChip(d, today).top}
+                  className={cx('h-1.5 rounded-full transition-[width,background-color] duration-300', d === current ? 'w-5 bg-white' : byDay.get(d)?.length ? 'w-1.5 bg-white/30' : 'w-1.5 bg-white/10')}
+                />
               ) : null,
             )}
           </div>
         </div>
-        <button onClick={() => step(1)} disabled={idx >= days.length - 1} aria-label="Próximo dia" className="rounded-full p-2 text-mute transition hover:text-white disabled:opacity-0">
+        <button onClick={() => step(1)} disabled={idx >= days.length - 1} aria-label="Próximo dia" className="rounded-full p-2 text-mute transition-colors hover:text-white disabled:opacity-0">
           <ChevronRight className="h-5 w-5" />
         </button>
       </div>
@@ -175,13 +195,19 @@ export default function Home() {
         <motion.div
           key={current}
           custom={dir}
-          variants={{ enter: (d: number) => ({ x: d >= 0 ? '60%' : '-60%', opacity: 0 }), center: { x: 0, opacity: 1 }, exit: (d: number) => ({ x: d >= 0 ? '-60%' : '60%', opacity: 0 }) }}
+          variants={{
+            enter: (d: number) => ({ x: d >= 0 ? '40%' : '-40%', opacity: 0 }),
+            center: { x: 0, opacity: 1, transition: { duration: 0.34, ease: EASE } },
+            // a que sai só some (rápido): esconde o salto de rolagem da troca de dia
+            exit: (d: number) => ({ x: d >= 0 ? '-12%' : '12%', opacity: 0, transition: { duration: 0.15 } }),
+          }}
           initial="enter"
           animate="center"
           exit="exit"
-          transition={{ type: 'spring', stiffness: 360, damping: 36 }}
           drag="x"
           dragDirectionLock
+          onDragStart={() => (axis.current = null)}
+          onDirectionLock={(a) => (axis.current = a)}
           dragConstraints={{ left: 0, right: 0 }}
           dragElastic={0.22}
           onDragEnd={onDragEnd}
@@ -198,11 +224,12 @@ export default function Home() {
             <div className="space-y-2.5">
               {list.map((m) => (
                 <div key={m.id} id={anchorId(m.id)} style={{ scrollMarginTop: HEADER_OFFSET }}>
-                  <MatchCard m={m} expanded={open === m.id} onToggle={() => setOpen(open === m.id ? null : m.id)} />
+                  <MatchCard m={m} expanded={open === m.id} onToggle={toggle} />
                 </div>
               ))}
-              {/* fim do dia: espaço pra qualquer card (inclusive o último) poder ficar no topo */}
-              <div className="flex flex-col items-center justify-start pt-8 text-center" style={{ minHeight: 'calc(100dvh - 300px)' }}>
+              {/* fim do dia: espaço pra qualquer card (inclusive o último) poder ficar no topo.
+                  svh (não dvh): não muda de tamanho quando a barra do navegador some ao rolar */}
+              <div className="flex flex-col items-center justify-start pt-8 text-center" style={{ minHeight: 'calc(100svh - 300px)' }}>
                 <span className="tag bg-coal text-pop-yellow">fim_do_dia</span>
                 {idx < days.length - 1 && (
                   <button onClick={() => step(1)} className="mt-3 inline-flex items-center gap-1 text-[13px] font-semibold text-mute hover:text-white">
@@ -224,18 +251,19 @@ export default function Home() {
         </motion.div>
       </AnimatePresence>
 
-      {/* volta pro jogo ao vivo */}
+      {/* volta pro jogo ao vivo (só aparece depois de saber que o jogo NÃO está na tela) */}
       <AnimatePresence>
-        {live && !liveInView && (
+        {live && liveInView === false && (
           <motion.a
             href={`#${anchorId(live.id)}`}
             onClick={(e) => {
               e.preventDefault();
               goTo(dayKey(live.scheduledAt), live.id);
             }}
-            initial={{ scale: 0, opacity: 0 }}
+            initial={{ scale: 0.6, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0, opacity: 0 }}
+            exit={{ scale: 0.6, opacity: 0 }}
+            transition={{ duration: 0.2, ease: EASE }}
             whileTap={{ scale: 0.9 }}
             aria-label="Ir pro jogo ao vivo"
             title="Jogo ao vivo"
@@ -249,22 +277,58 @@ export default function Home() {
   );
 }
 
-/** true quando o elemento com esse id está pelo menos 40% visível. */
+/** Segura o card `id` parado na tela por ~0,4 s enquanto o de cima fecha. */
+function keepInPlace(id: string) {
+  const el = document.getElementById(anchorId(id));
+  if (!el) return;
+  const top0 = el.getBoundingClientRect().top;
+  const until = performance.now() + 420;
+  const frame = () => {
+    const d = el.getBoundingClientRect().top - top0;
+    if (Math.abs(d) > 0.5) window.scrollBy(0, d);
+    if (performance.now() < until) requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
+
+/**
+ * O elemento com esse id está na tela? null = ainda não sabe (não mostra o botão
+ * flutuante só pra esconder em seguida). Card aberto mais alto que a tela conta
+ * como visível se ocupa boa parte dela.
+ */
 function useInView(id: string | null) {
-  const [inView, setInView] = useState(false);
+  const [inView, setInView] = useState<boolean | null>(null);
   useEffect(() => {
-    setInView(false);
+    setInView(id ? null : false);
     if (!id) return;
     let io: IntersectionObserver | null = null;
-    const t = setInterval(() => {
+    let watched: Element | null = null;
+    let raf = 0;
+    // o card pode ser recriado (troca de dia, filtro): reanexa no nó novo
+    const attach = () => {
       const el = document.getElementById(id);
-      if (!el || io) return;
-      io = new IntersectionObserver(([e]) => setInView(e.intersectionRatio >= 0.4), { threshold: [0, 0.4, 1] });
-      io.observe(el);
-    }, 250);
+      if (el && el !== watched) {
+        io?.disconnect();
+        watched = el;
+        io = new IntersectionObserver(([e]) => setInView(e.isIntersecting && (e.intersectionRatio >= 0.4 || e.intersectionRect.height >= window.innerHeight * 0.4)), {
+          threshold: [0, 0.1, 0.25, 0.4, 0.6, 1],
+        });
+        io.observe(el);
+      } else if (!el && !watched) setInView(false);
+    };
+    attach();
+    const mo = new MutationObserver(() => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        attach();
+      });
+    });
+    mo.observe(document.querySelector('main') ?? document.body, { childList: true, subtree: true });
     return () => {
-      clearInterval(t);
+      mo.disconnect();
       io?.disconnect();
+      cancelAnimationFrame(raf);
     };
   }, [id]);
   return inView;

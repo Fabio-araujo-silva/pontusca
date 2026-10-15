@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { serverNow } from './socket';
 
 /**
@@ -27,15 +27,36 @@ export function useScrolled(down = 56, up = 16) {
   return on;
 }
 
-/** Relógio que bate a cada `ms` (no tempo do servidor). */
+// Um relógio por intervalo, compartilhado por todos os componentes e alinhado à
+// virada do segundo: todos os cards ao vivo trocam o 12:34 -> 12:35 no mesmo frame.
+const tickers = new Map<number, { now: number; subs: Set<() => void>; timer?: ReturnType<typeof setTimeout> }>();
+const ticker = (ms: number) => {
+  let t = tickers.get(ms);
+  if (!t) tickers.set(ms, (t = { now: serverNow(), subs: new Set() }));
+  return t;
+};
+function subscribeTick(ms: number, cb: () => void) {
+  const t = ticker(ms);
+  t.subs.add(cb);
+  if (t.subs.size === 1) {
+    const tick = () => {
+      t.now = serverNow();
+      t.subs.forEach((f) => f());
+      t.timer = setTimeout(tick, ms - (serverNow() % ms) + 8);
+    };
+    tick();
+  }
+  return () => {
+    t.subs.delete(cb);
+    if (!t.subs.size) clearTimeout(t.timer);
+  };
+}
+const noop = () => () => {};
+
+/** Relógio que bate a cada `ms` (no tempo do servidor). Desligado = valor parado. */
 export function useNow(ms = 1000, enabled = true) {
-  const [now, setNow] = useState(serverNow);
-  useEffect(() => {
-    if (!enabled) return;
-    const t = setInterval(() => setNow(serverNow()), ms);
-    return () => clearInterval(t);
-  }, [ms, enabled]);
-  return now;
+  const sub = useCallback((cb: () => void) => (enabled ? subscribeTick(ms, cb) : noop()), [ms, enabled]);
+  return useSyncExternalStore(sub, () => ticker(ms).now);
 }
 
 const FAV_KEY = 'arq.favs';

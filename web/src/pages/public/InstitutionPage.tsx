@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Star } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Dispatch, SetStateAction, useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import type { StandingsDTO } from '@shared/types';
 import { MatchCard } from '@/components/match/MatchCard';
@@ -84,13 +84,14 @@ const Stat = ({ label, value }: { label: string; value: string }) => (
   </div>
 );
 
-function Block({ title, items, open, setOpen }: { title: string; items: Parameters<typeof MatchCard>[0]['m'][]; open: string | null; setOpen: (v: string | null) => void }) {
+function Block({ title, items, open, setOpen }: { title: string; items: Parameters<typeof MatchCard>[0]['m'][]; open: string | null; setOpen: Dispatch<SetStateAction<string | null>> }) {
+  const toggle = useCallback((id: string) => setOpen((o) => (o === id ? null : id)), [setOpen]);
   return (
     <section className="mt-6">
       <h2 className="mb-2 px-1 text-[13px] font-bold uppercase tracking-wider text-mute">{title}</h2>
       <div className="space-y-2.5">
         {items.map((m) => (
-          <MatchCard key={m.id} m={m} expanded={open === m.id} onToggle={() => setOpen(open === m.id ? null : m.id)} />
+          <MatchCard key={m.id} m={m} expanded={open === m.id} onToggle={toggle} />
         ))}
       </div>
     </section>

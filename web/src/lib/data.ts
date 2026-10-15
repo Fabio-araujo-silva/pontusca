@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import type { Highlight, InstitutionDTO, MatchSummary, SportDTO, TournamentDTO } from '@shared/types';
 import { get } from './api';
 import { SANDBOX } from './sandbox';
-import { useRooms, useSocketEvent } from './socket';
+import { useOnReconnect, useRooms, useSocketEvent } from './socket';
 
 export interface Bootstrap {
   tournaments: TournamentDTO[];
@@ -58,37 +58,58 @@ export function onHighlight(fn: (h: LiveHighlight) => void) {
  * Montado uma vez na raiz pública: entra na sala do feed e remenda o cache do
  * react-query a cada placar novo — o card muda na frente do torcedor sem refetch.
  */
+/** Executa depois de um atraso aleatório até `spread` ms (evita estouro de requisições simultâneas). */
+function later(fn: () => void, spread: number) {
+  setTimeout(fn, Math.random() * spread);
+}
+
 export function useLiveSync() {
   const qc = useQueryClient();
   useRooms([SANDBOX ? 'feed:sandbox' : 'feed']);
   useSocketEvent<{ summary: MatchSummary; highlight: Highlight | null }>('summary', ({ summary, highlight }) => {
+    let before: MatchSummary | undefined;
     qc.setQueryData<MatchSummary[]>(['feed', summary.tournamentId], (list) => {
       if (!list) return list;
       const i = list.findIndex((m) => m.id === summary.id);
       if (i < 0) return [...list, summary];
+      before = list[i];
       if (list[i].updatedAt > summary.updatedAt) return list;
       const next = list.slice();
       next[i] = summary;
       return next;
     });
-    qc.invalidateQueries({ queryKey: ['match', summary.id] });
-    qc.invalidateQueries({ queryKey: ['standings', summary.tournamentId] });
+    // lance a lance: só quem está com o jogo aberto busca (query ativa); espalhado
+    // no tempo pra milhares de torcedores não baterem no servidor no mesmo ms
+    later(() => qc.invalidateQueries({ queryKey: ['match', summary.id] }, { cancelRefetch: false }), 600);
+    // classificação só muda quando um jogo termina (ou deixa de estar terminado)
+    if (summary.status === 'FINISHED' || before?.status === 'FINISHED' || summary.manual !== before?.manual)
+      later(() => qc.invalidateQueries({ queryKey: ['standings', summary.tournamentId] }, { cancelRefetch: false }), 1500);
     if (highlight) bus.dispatchEvent(new CustomEvent('hl', { detail: { summary, highlight } }));
   });
   useSocketEvent<{ tournamentId: string }>('feed:changed', ({ tournamentId }) => {
-    qc.invalidateQueries({ queryKey: ['feed', tournamentId] });
+    later(() => qc.invalidateQueries({ queryKey: ['feed', tournamentId] }, { cancelRefetch: false }), 2500);
   });
+  // voltou a conexão: pode ter perdido lances no meio -> ressincroniza
+  useOnReconnect(() => later(() => qc.invalidateQueries({ queryKey: ['feed'] }, { cancelRefetch: false }), 2000));
   useSocketEvent<{ tournamentId: string }>('standings:changed', ({ tournamentId }) => {
     qc.invalidateQueries({ queryKey: ['standings', tournamentId] });
   });
 }
 
+const feedQuery = (tournamentId?: string) => ({
+  queryKey: ['feed', tournamentId],
+  queryFn: () => get<MatchSummary[]>(`/public/tournaments/${tournamentId}/feed`),
+  enabled: !!tournamentId,
+  staleTime: 30_000,
+  refetchOnWindowFocus: true,
+});
+
 export function useFeed(tournamentId?: string) {
-  return useQuery({
-    queryKey: ['feed', tournamentId],
-    queryFn: () => get<MatchSummary[]>(`/public/tournaments/${tournamentId}/feed`),
-    enabled: !!tournamentId,
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
-  });
+  return useQuery(feedQuery(tournamentId));
+}
+
+/** Modalidades presentes no feed, como lista estável (não muda a cada lance). */
+export function useFeedSportIds(tournamentId?: string) {
+  const q = useQuery({ ...feedQuery(tournamentId), select: (l: MatchSummary[]) => [...new Set(l.map((m) => m.sportId))].sort().join('|') });
+  return useMemo(() => (q.data ? q.data.split('|') : []), [q.data]);
 }

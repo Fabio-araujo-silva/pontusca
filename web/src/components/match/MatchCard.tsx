@@ -2,16 +2,18 @@
 // meio, e expande no lugar pra mostrar lance a lance, escalações e números.
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, MapPin, Star } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { memo, useEffect, useRef, useState } from 'react';
 import type { Highlight, InstitutionDTO, MatchSummary } from '@shared/types';
 import { usePublic } from '@/pages/public/PublicLayout';
 import { useOnScreen } from '@/lib/audience';
+import { get } from '@/lib/api';
 import { onHighlight } from '@/lib/data';
 import { alpha, fmtScore, onColor, teamTone } from '@/lib/format';
 import { useNow } from '@/lib/hooks';
 import { involves } from '@/lib/feed';
 import { useProfile } from '@/lib/profile';
-import { cx, LiveDot, ScoreNumber } from '../ui/primitives';
+import { cx, EASE, LiveDot, ScoreNumber } from '../ui/primitives';
 import { SportIcon } from '../ui/SportIcon';
 import { TeamFlag } from '../ui/TeamFlag';
 import { liveContext, phaseLine, sportLine, statusView, teamsOf } from './helpers';
@@ -19,8 +21,11 @@ import { celebratesFullscreen } from './Celebration';
 import { MatchDetailPanel } from './MatchDetailPanel';
 import { TimelineIcon } from './TimelineIcon';
 
-export const MatchCard = memo(function MatchCard({ m, expanded, onToggle }: { m: MatchSummary; expanded?: boolean; onToggle?: () => void }) {
+const OPEN = { duration: 0.32, ease: EASE };
+
+export const MatchCard = memo(function MatchCard({ m, expanded, onToggle }: { m: MatchSummary; expanded?: boolean; onToggle?: (id: string) => void }) {
   const { inst, sport, focused } = usePublic();
+  const qc = useQueryClient();
   const sp = sport.get(m.sportId);
   const { profile } = useProfile();
   const fav = involves(m, profile.atleticaId);
@@ -29,8 +34,16 @@ export const MatchCard = memo(function MatchCard({ m, expanded, onToggle }: { m:
   useOnScreen(ref, m.id);
 
   return (
-    <motion.article ref={ref} layout="position" className={cx('card relative overflow-hidden', expanded && 'ring-white/[0.12]')}>
-      <button type="button" onClick={onToggle} className="relative z-10 block w-full overflow-hidden px-4 pb-3.5 pt-3 text-left" aria-expanded={expanded}>
+    // sem `layout`: a altura do painel já empurra os cards de baixo pelo fluxo normal
+    <article ref={ref} className={cx('card relative overflow-hidden', expanded && 'ring-white/[0.12]')}>
+      <button
+        type="button"
+        onClick={() => onToggle?.(m.id)}
+        // começa a buscar o lance a lance no toque (antes do clique completar)
+        onPointerDown={() => !expanded && void qc.prefetchQuery({ queryKey: ['match', m.id], queryFn: () => get(`/public/matches/${m.id}`), staleTime: 15_000 })}
+        className="relative z-10 block w-full overflow-hidden px-4 pb-3.5 pt-3 text-left"
+        aria-expanded={expanded}
+      >
         <AnimatePresence>{flash && <CardFlash key={flash.key} h={flash.h} m={m} inst={inst} />}</AnimatePresence>
         <div className="flex items-center gap-2 text-[12px] text-mute">
           <SportIcon name={sp?.icon} size={15} className="shrink-0 text-white/75" />
@@ -42,16 +55,25 @@ export const MatchCard = memo(function MatchCard({ m, expanded, onToggle }: { m:
           </span>
         </div>
         {m.score.ranking ? <RankingBody m={m} inst={inst} /> : <HeadToHead m={m} inst={inst} />}
-        {!expanded && <Footer m={m} />}
+        {/* rodapé recolhe junto com a abertura do painel (antes sumia de uma vez e o card "pulava") */}
+        <AnimatePresence initial={false}>
+          {!expanded && hasFooter(m) && (
+            <motion.div key="f" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={OPEN} className="overflow-hidden">
+              <div className="pt-3">
+                <Footer m={m} />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </button>
       <AnimatePresence initial={false}>
         {expanded && (
-          <motion.div key="d" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ type: 'spring', stiffness: 260, damping: 32 }} className="relative z-10 overflow-hidden">
+          <motion.div key="d" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={OPEN} className="relative z-10 overflow-hidden">
             <MatchDetailPanel id={m.id} summary={m} />
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.article>
+    </article>
   );
 });
 
@@ -165,10 +187,12 @@ function RankingBody({ m, inst }: { m: MatchSummary; inst: Map<string, Instituti
   );
 }
 
+const hasFooter = (m: MatchSummary) => (m.status === 'LIVE' && !!m.lastEvent && m.lastEvent.type !== 'MATCH_START') || (m.status === 'SCHEDULED' && !!m.venue);
+
 function Footer({ m }: { m: MatchSummary }) {
   if (m.status === 'LIVE' && m.lastEvent && m.lastEvent.type !== 'MATCH_START') {
     return (
-      <div className="mt-3 flex items-center gap-2 border-t border-white/[0.05] pt-2.5 text-[12px] text-white/70">
+      <div className="flex items-center gap-2 border-t border-white/[0.05] pt-2.5 text-[12px] text-white/70">
         <TimelineIcon icon={iconForType(m.lastEvent.type)} size={13} />
         <span className="truncate">{m.lastEvent.label}</span>
       </div>
@@ -176,7 +200,7 @@ function Footer({ m }: { m: MatchSummary }) {
   }
   if (m.status === 'SCHEDULED' && m.venue)
     return (
-      <div className="mt-3 flex items-center justify-center gap-1 text-[12px] text-mute">
+      <div className="flex items-center justify-center gap-1 text-[12px] text-mute">
         <MapPin className="h-3 w-3" />
         {m.venue}
       </div>

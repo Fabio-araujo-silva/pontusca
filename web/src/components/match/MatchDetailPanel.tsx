@@ -33,7 +33,8 @@ export function MatchDetailPanel({ id, summary, page }: { id: string; summary?: 
 
   useEffect(() => {
     setFocused(id);
-    return () => setFocused(null);
+    // ao trocar de card, o painel antigo sai depois do novo entrar: só limpa se ainda for ele
+    return () => setFocused((f) => (f === id ? null : f));
   }, [id, setFocused]);
 
   const tabs = useMemo(() => {
@@ -68,7 +69,7 @@ export function MatchDetailPanel({ id, summary, page }: { id: string; summary?: 
       </div>
 
       <div className="mt-3 px-4">
-        {active === 'lances' && <TimelineView d={d} teams={teams} sp={sp} />}
+        {active === 'lances' && <TimelineView d={d} teams={teams} sp={sp} pending={q.isPlaceholderData} />}
         {active === 'escalacoes' && <Lineups d={d} teams={teams} />}
         {active === 'numeros' && <Numbers d={d} teams={teams} sp={sp} />}
         {active === 'resultado' && <RankingTable d={d} inst={inst} sp={sp} />}
@@ -84,12 +85,21 @@ export function MatchDetailPanel({ id, summary, page }: { id: string; summary?: 
 
 const LIFECYCLE = new Set(['MATCH_START', 'PERIOD_START', 'PERIOD_END', 'MATCH_END', 'SHOOTOUT_START', 'WO']);
 
-function TimelineView({ d, teams, sp }: { d: MatchDetail; teams: { home: InstitutionDTO; away: InstitutionDTO }; sp?: SportDTO }) {
+function TimelineView({ d, teams, sp, pending }: { d: MatchDetail; teams: { home: InstitutionDTO; away: InstitutionDTO }; sp?: SportDTO; pending?: boolean }) {
   const [minor, setMinor] = useState(false);
   const minorCount = d.timeline.filter((t) => t.minor).length;
   const items = [...d.timeline].filter((t) => minor || !t.minor).reverse();
   const isSets = sp?.engine === 'SETS' || sp?.engine === 'TENNIS';
 
+  // ainda chegando: esqueleto com altura parecida (não mostra "sem lances" e depois pula)
+  if (!d.timeline.length && pending && d.status !== 'SCHEDULED')
+    return (
+      <div className="space-y-2 py-3">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="skeleton h-9" />
+        ))}
+      </div>
+    );
   if (!d.timeline.length) return <p className="py-6 text-center text-[13px] text-mute">{d.status === 'SCHEDULED' ? 'O lance a lance aparece aqui assim que a bola rolar.' : 'Sem lances registrados.'}</p>;
 
   return (

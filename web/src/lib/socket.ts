@@ -6,6 +6,18 @@ import { report } from './log';
 let socket: Socket | null = null;
 let offset = 0; // relógio do servidor - relógio local
 const rooms = new Map<string, number>(); // sala -> nº de componentes interessados
+const reconnectSubs = new Set<() => void>();
+
+/** Chamado a cada reconexão (não na primeira conexão). */
+export function useOnReconnect(fn: () => void) {
+  const ref = useRef(fn);
+  ref.current = fn;
+  useEffect(() => {
+    const f = () => ref.current();
+    reconnectSubs.add(f);
+    return () => void reconnectSubs.delete(f);
+  }, []);
+}
 
 function syncTime(s: Socket) {
   const t0 = Date.now();
@@ -31,7 +43,11 @@ export function getSocket(): Socket {
   });
   socket.on('connect_error', (e) => report('warn', 'socket.connect_error', { msg: e.message }));
   socket.on('connect', () => {
-    if (downAt) report('info', 'socket.reconnect', { data: { downMs: Date.now() - downAt } });
+    if (downAt) {
+      report('info', 'socket.reconnect', { data: { downMs: Date.now() - downAt } });
+      // quem ficou de fora pode ter perdido lances: avisa pra ressincronizar
+      reconnectSubs.forEach((fn) => fn());
+    }
     downAt = 0;
     const list = [...rooms.keys()];
     if (list.length) socket!.emit('join', list);

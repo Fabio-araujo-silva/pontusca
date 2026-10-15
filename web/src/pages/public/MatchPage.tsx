@@ -42,7 +42,7 @@ export default function MatchPage() {
           </Link>
         </Empty>
       ) : (
-        <MatchCard m={m} expanded onToggle={() => undefined} />
+        <MatchCard m={m} expanded />
       )}
     </div>
   );
