@@ -81,21 +81,24 @@ export function useLiveSync() {
       return next;
     });
     if (!before) {
-      later(() => qc.invalidateQueries({ queryKey: ['feed', t.tournamentId] }, { cancelRefetch: false }), 1500);
+      // jogo fora do feed carregado (feed ainda chegando, /jogo/:id de outro torneio)
+      later(() => qc.invalidateQueries({ queryKey: ['match', t.id] }), 600);
+      later(() => qc.invalidateQueries({ queryKey: ['feed', t.tournamentId] }), 1500);
       return;
     }
     if (!summary) return;
     const m: MatchSummary = summary;
     // lance a lance: só quem está com o jogo aberto busca (query ativa); espalhado
     // no tempo pra milhares de torcedores não baterem no servidor no mesmo ms
-    later(() => qc.invalidateQueries({ queryKey: ['match', m.id] }, { cancelRefetch: false }), 600);
+    // cancela a busca anterior: ela pode ter saído antes deste lance (ficaria 1 lance atrás)
+    later(() => qc.invalidateQueries({ queryKey: ['match', m.id] }), 600);
     // classificação só muda quando um jogo termina (ou deixa de estar terminado)
     if (m.status === 'FINISHED' || before?.status === 'FINISHED' || m.manual !== before?.manual)
       later(() => qc.invalidateQueries({ queryKey: ['standings', m.tournamentId] }, { cancelRefetch: false }), 1500);
     if (highlight) bus.dispatchEvent(new CustomEvent('hl', { detail: { summary: m, highlight } }));
   });
   useSocketEvent<{ tournamentId: string }>('feed:changed', ({ tournamentId }) => {
-    later(() => qc.invalidateQueries({ queryKey: ['feed', tournamentId] }, { cancelRefetch: false }), 2500);
+    later(() => qc.invalidateQueries({ queryKey: ['feed', tournamentId] }), 2500);
   });
   // voltou a conexão: pode ter perdido lances no meio -> ressincroniza
   useOnReconnect(() => later(() => qc.invalidateQueries({ queryKey: ['feed'] }, { cancelRefetch: false }), 2000));

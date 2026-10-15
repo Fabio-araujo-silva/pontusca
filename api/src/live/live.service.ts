@@ -328,6 +328,8 @@ export class LiveService implements OnApplicationBootstrap {
     });
     if (!m) throw new NotFoundException('Jogo não encontrado.');
     const { events: rows, ...match } = m;
+    // seq do jogo nunca atrás do último lance gravado (ex.: lances "silenciosos" do sandbox)
+    if (rows.length) match.seq = Math.max(match.seq, rows[rows.length - 1].seq);
     const names: Record<string, string> = {};
     for (const p of match.players) names[p.athleteId] = athleteLabel(p.athlete);
     // atletas que saíram da escalação mas têm lance registrado

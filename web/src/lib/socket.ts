@@ -5,6 +5,10 @@ import { report } from './log';
 
 let socket: Socket | null = null;
 let offset = 0; // relógio do servidor - relógio local
+let synced = false;
+
+/** O relógio já foi acertado com o servidor? (sem isso, a hora do aparelho pode estar errada) */
+export const clockSynced = () => synced;
 const rooms = new Map<string, number>(); // sala -> nº de componentes interessados
 const reconnectSubs = new Set<() => void>();
 
@@ -25,6 +29,7 @@ function syncTime(s: Socket) {
     if (err || !r) return;
     const t1 = Date.now();
     offset = r.serverTime - (t0 + t1) / 2;
+    synced = true;
   });
 }
 

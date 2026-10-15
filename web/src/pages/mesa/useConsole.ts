@@ -10,7 +10,7 @@ import type { EngineEvent, MatchCommand, MatchDetail, MatchSummary, Side } from 
 import { ApiError, get, patch, post, put } from '@/lib/api';
 import { report } from '@/lib/log';
 import { vibrate } from '@/lib/hooks';
-import { serverNow, useConnected, useRooms, useSocketEvent } from '@/lib/socket';
+import { clockSynced, serverNow, useConnected, useRooms, useSocketEvent } from '@/lib/socket';
 import { toast } from '@/components/ui/primitives';
 import type { Cmd, EngineState, MesaMatch } from './types';
 
@@ -252,7 +252,7 @@ export function useConsole(id: string) {
       if (!inp || !o) return false;
       const clientId = uuid();
       // hora do toque: se ficar na fila sem sinal, o lance entra no minuto certo
-      const full = { ...cmd, clientId, at: Math.round(serverNow()) } as MatchCommand;
+      const full = { ...cmd, clientId, ...(clockSynced() && { at: Math.round(serverNow()) }) } as MatchCommand;
       let draft;
       try {
         draft = buildEvent(inp, o, full, serverNow());
@@ -373,7 +373,9 @@ export function useConsole(id: string) {
     if (summary.id !== id) return;
     // fila enviando: não recarrega agora (perderia o otimista), mas lembra de conferir depois
     if (queueRef.current.length || flushing.current) {
-      dirty.current = true;
+      // o eco dos próprios lances não conta: só marca se há lance de outra origem
+      const known = (dataRef.current?.engine.events.reduce((m, e) => Math.max(m, e.seq), 0) ?? 0) + queueRef.current.filter((q) => q.cmd).length;
+      if (summary.seq > known) dirty.current = true;
       return;
     }
     const d = dataRef.current;

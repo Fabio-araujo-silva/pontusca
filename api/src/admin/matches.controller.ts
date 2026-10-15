@@ -214,7 +214,8 @@ export class MatchesController {
     const errors: string[] = [];
     for (const { m, n } of plan) {
       if (n.mesarioId && n.mesarioId === n.backupMesarioId) errors.push(`${label(m)}: titular e reserva precisam ser pessoas diferentes.`);
-      for (const uid of [n.mesarioId, n.backupMesarioId]) {
+      // só valida quem está ENTRANDO (o titular antigo desativado não pode travar a troca do reserva)
+      for (const uid of [n.mesarioId !== m.mesarioId && n.mesarioId, n.backupMesarioId !== m.backupMesarioId && n.backupMesarioId]) {
         if (!uid) continue;
         const u = users.get(uid);
         if (!u || !u.active) errors.push(`${label(m)}: pessoa não encontrada ou desativada.`);
@@ -236,6 +237,8 @@ export class MatchesController {
         }),
       ),
     );
+    // permissões do console leem o cache ao vivo: recarrega os jogos que mudaram
+    await Promise.all(changed.map(({ m }) => this.live.refresh(m.id)));
     for (const { m, n } of changed) {
       log.info('staff.assign', {
         match: m.id,
