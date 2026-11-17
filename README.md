@@ -1,3 +1,16 @@
+<p align="center">
+  <img src="docs/img/capa.png" alt="PONTUSCA: placar ao vivo dos jogos de atlética" width="100%">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/TypeScript-111114?style=for-the-badge&logo=typescript" alt="TypeScript">
+  <img src="https://img.shields.io/badge/NestJS-111114?style=for-the-badge&logo=nestjs" alt="NestJS">
+  <img src="https://img.shields.io/badge/Socket.IO-111114?style=for-the-badge&logo=socketdotio" alt="Socket.IO">
+  <img src="https://img.shields.io/badge/Prisma-111114?style=for-the-badge&logo=prisma" alt="Prisma">
+  <img src="https://img.shields.io/badge/React-111114?style=for-the-badge&logo=react" alt="React">
+  <img src="https://img.shields.io/badge/Tailwind-111114?style=for-the-badge&logo=tailwindcss" alt="Tailwind">
+</p>
+
 # PONTUSCA
 
 **Placar ao vivo para jogos de atlética.** Um sistema para contar a pontuação de competições universitárias (TUSCA, InterUSP e afins) em tempo real, com **vários mesários logados ao mesmo tempo**, cada um registrando os lances do seu jogo na beira da quadra, e a torcida acompanhando tudo ao vivo pelo celular.
@@ -6,19 +19,200 @@
 
 📘 **[COMO-USAR.md](./COMO-USAR.md)**: guia de uso (organização, mesários, torcida, sandbox, celular).
 
+**Sumário:** [O que ele faz](#o-que-ele-faz) · [Como funciona](#como-funciona) · [Fluxos](#fluxos) · [Telas](#telas) · [Cores e tipografia](#cores-e-tipografia) · [Stack](#stack) · [Rodar local](#rodar-local) · [Por dentro](#por-dentro) · [Deploy](#deploy)
+
 ## O que ele faz
 
 - **Vários mesários em paralelo.** Cada jogo tem um mesário titular e um reserva, escalados pela organização. Todos ficam logados ao mesmo tempo, cada um no seu jogo, e o console funciona até sem sinal (os lances ficam numa fila e sobem quando a rede volta).
 - **Pontuação ao vivo de 42 modalidades.** Futebol, futsal, basquete, handebol, vôlei, tênis, beisebol, natação, atletismo, e-sports e outras, cada uma com seu motor de placar (gols, sets, games, entradas, ranking por tempo ou marca).
 - **Classificação geral das atléticas.** Os pontos do torneio são recalculados a cada resultado, com regras configuráveis por modalidade, critérios de desempate e ajustes manuais (bônus, punição).
 - **Torcida em tempo real.** Site público sem login, com o placar de todos os jogos, animação de gol, lance a lance, escalações e um print do placar pronto para postar. Aguenta milhares de conexões simultâneas.
-- **Painel da organização.** Cadastro de atléticas, modalidades, jogos e mesários, correção de qualquer lance e um sandbox com um robô mesário para testar um dia cheio de jogos.
+- **Painel da organização.** Cadastro de atléticas, modalidades, jogos e mesários, correção de qualquer lance, audiência ao vivo e um sandbox com um robô mesário para testar um dia cheio de jogos.
 
-## As três frentes
+### As três frentes
 
-- **Público** (`/`): sem login. No primeiro acesso pergunta a atlética e os esportes preferidos (fica no `localStorage`) e mostra um tutorial de 3 gestos. Mostra os jogos em cards no estilo Apple Sports, com placar e animação de gol ao vivo, lance a lance, escalações, agenda por dia, filtros, classificação geral e um print do placar pronto pra postar.
-- **Mesa** (`/mesa`): console do **mesário**, a pessoa que registra o placar na beira da quadra. Login próprio, funciona otimista e offline.
-- **Bastidores** (`/bastidores`): painel admin escondido (não tem link em lugar nenhum do site público). O caminho muda com `VITE_ADMIN_PATH` no build.
+| Frente | Endereço | Quem usa | Login |
+|---|---|---|---|
+| **Torcida** | `/` | qualquer pessoa: feed do dia, jogo lance a lance, classificação, print do placar | não |
+| **Mesa** | `/mesa` | **mesários**, na beira da quadra, um por jogo (titular + reserva) | sim |
+| **Bastidores** | `/bastidores` | **organização**: torneios, atléticas, modalidades, equipe, jogos, pontuação | sim (admin) |
+
+O painel admin não tem link em nenhum lugar do site público, e o caminho muda com `VITE_ADMIN_PATH` no build.
+
+## Como funciona
+
+Cada jogo é uma **lista de eventos** (gol, cartão, ponto, fim de período…). O placar, o relógio, o período e as estatísticas nunca são gravados "na mão": são sempre recalculados a partir dessa lista pelo motor da modalidade. O mesmo motor roda no servidor e no celular do mesário.
+
+```mermaid
+flowchart LR
+    subgraph Quadra["🏟️ Beira da quadra"]
+        M1["📱 Mesário A<br/>futsal"]
+        M2["📱 Mesário B<br/>vôlei"]
+        M3["📱 Mesário C<br/>basquete"]
+    end
+
+    subgraph Servidor["🖥️ API (NestJS)"]
+        Q["Fila por jogo<br/>(idempotente)"]
+        E["Motor de placar<br/>placar = reduce(eventos)"]
+        DB[("SQLite<br/>eventos")]
+        C["Cache em memória<br/>feed + detalhe"]
+        S["Pontuação do torneio<br/>classificação geral"]
+    end
+
+    subgraph Publico["📣 Quem acompanha"]
+        T["Torcida<br/>milhares de celulares"]
+        A["Bastidores<br/>organização"]
+    end
+
+    M1 & M2 & M3 -- "lance (clientId)" --> Q
+    Q --> E --> DB
+    E --> C
+    E --> S
+    C -- "Socket.IO · tick enxuto" --> T
+    C -- "Socket.IO · resumo completo" --> A
+    S -- "classificação" --> T
+```
+
+- **Otimista:** o celular do mesário roda o motor localmente e mostra o placar novo na hora, antes de a rede confirmar.
+- **Idempotente:** cada toque vira um comando com `clientId`. Se o sinal cair, a fila do aparelho reenvia depois e o servidor ignora duplicatas.
+- **Barato pra torcida:** o feed público e o detalhe de cada jogo ficam serializados em memória (JSON + gzip + ETag), então os torcedores não consultam o banco. Medido localmente: **1000 conexões simultâneas recebendo 22 mil atualizações em 20 s, latência p99 de 114 ms**.
+
+## Fluxos
+
+### Um lance, do toque à torcida
+
+O mesário marca o gol e o placar sobe na hora. Quem fez o gol pode ser informado logo depois, ou no intervalo ("marca agora, autor depois").
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Mes as Mesário
+    participant Cel as Celular (motor local + fila)
+    participant API as API
+    participant Mot as Motor de placar
+    participant Tor as Torcida
+
+    Mes->>Cel: toca GOL
+    Cel->>Cel: recalcula o placar na hora (otimista)
+    Cel->>API: comando {clientId, gol, lado}
+    alt sem sinal
+        Cel-->>Cel: guarda na fila e reenvia com backoff
+    end
+    API->>Mot: valida e grava o evento
+    Mot-->>API: placar, relógio e estatísticas novos
+    API-->>Cel: confirmado (seq)
+    API-->>Tor: tick ao vivo + animação de gol
+    Cel->>Mes: barra "quem fez?" com as camisas
+    Mes->>Cel: toca o nº 10 (ou "Depois")
+    Cel->>API: PATCH autor do evento
+    API-->>Tor: lance atualizado com o autor
+```
+
+### Organização de um torneio
+
+```mermaid
+flowchart LR
+    A["🏆 Torneio<br/>colocar no site + banner"] --> B["🛡️ Atléticas<br/>cores, bandeira, logo"]
+    B --> C["⚽ Modalidades<br/>42 prontas, ajustáveis"]
+    C --> D["👕 Elencos<br/>colar lista de atletas"]
+    D --> E["🧑‍⚖️ Equipe<br/>mesários e modalidades habilitadas"]
+    E --> F["📅 Jogos<br/>horário, local, titular e reserva"]
+    F --> G["🧮 Pontuação<br/>V/E/D, colocação, desempate"]
+    G --> H{"Dia do evento"}
+    H --> I["Visão geral: alertas,<br/>audiência, ao vivo agora"]
+    H --> J["Liberar reserva,<br/>trocar mesário na hora"]
+    H --> K["Corrigir lance ou<br/>lançar resultado manual"]
+```
+
+### Vida de um jogo
+
+```mermaid
+stateDiagram-v2
+    state "Ao vivo" as AoVivo
+    [*] --> Agendado
+    Agendado --> AoVivo: mesário segura "Iniciar"
+    AoVivo --> AoVivo: lances, períodos,<br/>prorrogação, pênaltis
+    AoVivo --> Encerrado: segura "Fim de jogo"
+    Encerrado --> AoVivo: desfazer "Fim de jogo"
+    Agendado --> Adiado
+    Agendado --> Cancelado
+    Encerrado --> [*]
+
+    note right of AoVivo
+        desfazer = anular um evento;
+        o placar é recalculado
+    end note
+```
+
+Ações críticas (iniciar, encerrar período ou jogo) pedem **segurar o botão** para confirmar, para evitar toque sem querer.
+
+## Telas
+
+> Capturas do modo sandbox, com atléticas, atletas e mesários de exemplo.
+
+### Torcida
+
+<table>
+  <tr>
+    <td align="center" width="25%"><img src="docs/img/publico-boas-vindas.png" alt="Boas-vindas"><br><sub><b>Boas-vindas</b><br>escolhe a atlética no primeiro acesso</sub></td>
+    <td align="center" width="25%"><img src="docs/img/publico-feed.png" alt="Feed do dia"><br><sub><b>Feed do dia</b><br>arrasta pro lado pra trocar o dia</sub></td>
+    <td align="center" width="25%"><img src="docs/img/publico-jogo.png" alt="Jogo lance a lance"><br><sub><b>Jogo</b><br>lance a lance, escalações e números</sub></td>
+    <td align="center" width="25%"><img src="docs/img/publico-compartilhar.png" alt="Compartilhar placar"><br><sub><b>Compartilhar</b><br>print do placar em feed ou story</sub></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td align="center" width="28%"><img src="docs/img/publico-classificacao.png" alt="Classificação geral"><br><sub><b>Classificação</b><br>pódio, medalhas e pontos</sub></td>
+    <td align="center" width="72%"><img src="docs/img/publico-desktop.png" alt="Feed no computador"><br><sub><b>No computador</b><br>o mesmo feed, centralizado</sub></td>
+  </tr>
+</table>
+
+### Mesa (mesário)
+
+<table>
+  <tr>
+    <td align="center" width="33%"><img src="docs/img/mesa-jogos.png" alt="Meus jogos"><br><sub><b>Meus jogos</b><br>onde o mesário está escalado, titular ou reserva</sub></td>
+    <td align="center" width="33%"><img src="docs/img/mesa-console.png" alt="Console do mesário"><br><sub><b>Console</b><br>botões grandes, cores das atléticas, sincronização</sub></td>
+    <td align="center" width="33%"><img src="docs/img/mesa-quem-fez.png" alt="Quem fez"><br><sub><b>Quem fez?</b><br>o gol já valeu; o autor vem depois</sub></td>
+  </tr>
+</table>
+
+### Bastidores (organização)
+
+<p align="center"><img src="docs/img/bastidores-visao-geral.png" alt="Visão geral" width="100%"><br><sub><b>Visão geral</b>: audiência por jogo, ao vivo agora e o mesário titular e reserva de cada partida</sub></p>
+
+<table>
+  <tr>
+    <td align="center" width="50%"><img src="docs/img/bastidores-equipe.png" alt="Equipe"><br><sub><b>Equipe</b>: mesários, modalidades habilitadas e escala</sub></td>
+    <td align="center" width="50%"><img src="docs/img/bastidores-jogos.png" alt="Jogos"><br><sub><b>Jogos</b>: agenda do dia, status e mesário de cada jogo</sub></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><img src="docs/img/bastidores-pontuacao.png" alt="Pontuação" width="70%"><br><sub><b>Pontuação</b>: regras por jogo, colocação final, provas e desempate</sub></td>
+  </tr>
+</table>
+
+## Cores e tipografia
+
+<p align="center"><img src="docs/img/paleta.png" alt="Paleta e tipografia" width="100%"></p>
+
+Tema claro, inspirado na identidade do TUSCA 2026: títulos e placares numa condensada pesada, texto numa display arredondada, paleta pop em etiquetas chapadas e ticker preto com texto amarelo. Cada atlética ainda traz **as próprias cores e bandeira**, usadas no card, no console do mesário e no print compartilhável.
+
+| Token | Cor | Onde aparece |
+|---|---|---|
+| `pop.orange` | ![#FF8A15](https://placehold.co/14x14/FF8A15/FF8A15.png) `#FF8A15` | "HOJE", etiquetas, ponto do logo |
+| `pop.yellow` | ![#FFF41F](https://placehold.co/14x14/FFF41F/FFF41F.png) `#FFF41F` | texto do ticker |
+| `pop.purple` | ![#8A0791](https://placehold.co/14x14/8A0791/8A0791.png) `#8A0791` | etiquetas e destaques |
+| `pop.green` | ![#43E856](https://placehold.co/14x14/43E856/43E856.png) `#43E856` | etiquetas e destaques |
+| `pop.magenta` | ![#FF27FF](https://placehold.co/14x14/FF27FF/FF27FF.png) `#FF27FF` | etiquetas e destaques |
+| `pop.blue` | ![#316CFF](https://placehold.co/14x14/316CFF/316CFF.png) `#316CFF` | audiência, links |
+| `live` | ![#E0261D](https://placehold.co/14x14/E0261D/E0261D.png) `#E0261D` | relógio e selo "ao vivo" |
+| `win` | ![#15803D](https://placehold.co/14x14/15803D/15803D.png) `#15803D` | vencedor, sincronizado |
+| `fg` / `brand` | ![#111114](https://placehold.co/14x14/111114/111114.png) `#111114` | texto, botões principais |
+
+As cores são variáveis CSS em `web/src/index.css`. Já existe um `[data-theme='dark']` pronto, se um dia quiserem modo noturno.
+
+## Stack
 
 | Camada | Stack |
 |---|---|
@@ -57,7 +251,7 @@ npm test          # motor de placar: futebol, pênaltis, vôlei, tênis, beisebo
 npm run typecheck # api + web
 ```
 
-## Como funciona
+## Por dentro
 
 **Placar = reduce(eventos).** Cada jogo é uma lista de eventos (gol, cartão, ponto, fim de período...), e o placar, o relógio, o período e as estatísticas são sempre recalculados a partir dela. Por isso:
 
@@ -86,8 +280,6 @@ npm run typecheck # api + web
 **Feed por dia (home).** Uma tela por dia, sem filtros: arrastar pro lado troca o dia (setas do teclado no desktop). Abre fixado no jogo do momento (ao vivo de qualquer dia > último encerrado > primeiro do dia) via âncora `#jogo-<id>` — que também serve de link compartilhável. Botão redondo flutuante leva pro jogo ao vivo (some se não há jogo ou se ele já está na tela). Switch "Só <atlética>" no topo filtra pela atlética do torcedor. Regras em `web/src/lib/feed.ts`, testadas em `feed.test.ts` (Vitest).
 
 **Torneio do momento.** O público não escolhe torneio: vê só o que o admin marcou em Bastidores → Torneios → "Colocar no site" (um por ambiente, real e sandbox). Cada torneio pode ter um **banner** (upload ou URL, com link opcional) exibido no topo da Classificação. O modelo `web/public/banners/tusca-2026.svg` vem pronto.
-
-**Visual.** Tema claro, inspirado na identidade do TUSCA 2026: Big Shoulders Display (condensada pesada) nos títulos e placares, Funnel Display no texto, paleta pop em etiquetas chapadas e ticker preto com texto amarelo. As cores são variáveis CSS em `web/src/index.css`, e já existe um `[data-theme='dark']` pronto, se um dia quiserem modo noturno.
 
 **Pontuação do torneio** (Bastidores → Pontuação):
 
