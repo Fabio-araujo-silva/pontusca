@@ -1,14 +1,23 @@
 # PONTUSCA
 
-> Pasta/pacotes ainda chamam `arquibancada` (nome antigo do projeto).
+**Placar ao vivo para jogos de atlética.** Um sistema para contar a pontuação de competições universitárias (TUSCA, InterUSP e afins) em tempo real, com **vários mesários logados ao mesmo tempo**, cada um registrando os lances do seu jogo na beira da quadra, e a torcida acompanhando tudo ao vivo pelo celular.
 
-📘 **[COMO-USAR.md](./COMO-USAR.md)** — guia de uso (organização, mesários, torcida, sandbox, celular).  
-🤖 **[AGENTS.md](./AGENTS.md)** — guia pra agentes de IA que forem mexer no código.
+> Pastas e pacotes ainda se chamam `arquibancada` (nome antigo do projeto).
 
-Placar ao vivo dos jogos universitários que não têm cobertura (TUSCA, InterUSP e afins). Tem três frentes:
+📘 **[COMO-USAR.md](./COMO-USAR.md)**: guia de uso (organização, mesários, torcida, sandbox, celular).
+
+## O que ele faz
+
+- **Vários mesários em paralelo.** Cada jogo tem um mesário titular e um reserva, escalados pela organização. Todos ficam logados ao mesmo tempo, cada um no seu jogo, e o console funciona até sem sinal (os lances ficam numa fila e sobem quando a rede volta).
+- **Pontuação ao vivo de 42 modalidades.** Futebol, futsal, basquete, handebol, vôlei, tênis, beisebol, natação, atletismo, e-sports e outras, cada uma com seu motor de placar (gols, sets, games, entradas, ranking por tempo ou marca).
+- **Classificação geral das atléticas.** Os pontos do torneio são recalculados a cada resultado, com regras configuráveis por modalidade, critérios de desempate e ajustes manuais (bônus, punição).
+- **Torcida em tempo real.** Site público sem login, com o placar de todos os jogos, animação de gol, lance a lance, escalações e um print do placar pronto para postar. Aguenta milhares de conexões simultâneas.
+- **Painel da organização.** Cadastro de atléticas, modalidades, jogos e mesários, correção de qualquer lance e um sandbox com um robô mesário para testar um dia cheio de jogos.
+
+## As três frentes
 
 - **Público** (`/`): sem login. No primeiro acesso pergunta a atlética e os esportes preferidos (fica no `localStorage`) e mostra um tutorial de 3 gestos. Mostra os jogos em cards no estilo Apple Sports, com placar e animação de gol ao vivo, lance a lance, escalações, agenda por dia, filtros, classificação geral e um print do placar pronto pra postar.
-- **Mesa** (`/mesa`): console do **mesário**, a pessoa que registra o placar na beira da quadra. Funciona otimista e offline.
+- **Mesa** (`/mesa`): console do **mesário**, a pessoa que registra o placar na beira da quadra. Login próprio, funciona otimista e offline.
 - **Bastidores** (`/bastidores`): painel admin escondido (não tem link em lugar nenhum do site público). O caminho muda com `VITE_ADMIN_PATH` no build.
 
 | Camada | Stack |
@@ -20,7 +29,6 @@ Placar ao vivo dos jogos universitários que não têm cobertura (TUSCA, InterUS
 ## Rodar local
 
 ```bash
-cd arquibancada
 cp api/.env.example api/.env     # ajuste JWT_SECRET/ADMIN_* se quiser
 npm run setup                    # instala, cria o banco e roda o seed
 npm run dev                      # API :3000 + front :5173
